@@ -1,0 +1,27 @@
+{
+  "name": "@overwatch/connectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@overwatch/schemas": "workspace:*",
+    "zod": "^3.24.1",
+    "ws": "^8.18.0",
+    "mqtt": "^5.10.3",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "@types/xml2js": "^0.4.14",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.2"
+  }
+}

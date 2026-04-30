@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "preserve",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@overwatch/schemas": ["packages/schemas/src/index.ts"],
+      "@overwatch/connectors": ["packages/connectors/src/index.ts"],
+      "@overwatch/ui": ["packages/ui/src/index.ts"],
+      "@overwatch/ai": ["packages/ai/src/index.ts"],
+      "@overwatch/cv": ["packages/cv/src/index.ts"],
+      "@overwatch/agent": ["packages/agent/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "dist", ".next", ".turbo"]
+}

@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  fabric:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.fabric
+    ports:
+      - "4311:4311"
+    environment:
+      FABRIC_PORT: "4311"
+      OVERWATCH_DB: /data/overwatch.db
+      OVERWATCH_KEY_PATH: /data/key.bin
+    volumes:
+      - overwatch_data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    ports:
+      - "3311:3311"
+    environment:
+      FABRIC_URL: http://fabric:4311
+      NEXT_PUBLIC_FABRIC_WS: ws://localhost:4311
+      NEXT_PUBLIC_GO2RTC_URL: http://localhost:1984
+    depends_on:
+      - fabric
+    restart: unless-stopped
+
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    network_mode: host
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+    restart: unless-stopped
+
+volumes:
+  overwatch_data:
