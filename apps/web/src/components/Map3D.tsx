@@ -1,0 +1,198 @@
+"use client";
+import { useEffect, useMemo, useRef } from "react";
+import { useStore } from "@/lib/store";
+import type { IngestEvent } from "@overwatch/schemas";
+
+export function Map3D() {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewerRef = useRef<any>(null);
+  const entitiesRef = useRef<Map<string, any>>(new Map());
+  const events = useStore((s) => s.events);
+  const locations = useStore((s) => s.locations);
+  const flyTo = useStore((s) => s.flyTo);
+  const setFlyTo = useStore((s) => s.requestFlyTo);
+  const select = useStore((s) => s.selectEvent);
+
+  const visibleEvents = useMemo(
+    () => events.filter((e) => e.geo).slice(0, 1500),
+    [events],
+  );
+
+  useEffect(() => {
+    let destroyed = false;
+    let viewer: any = null;
+    (async () => {
+      const Cesium = await import("cesium");
+      // Inline minimal Cesium widget styles
+      if (!document.getElementById("cesium-widgets-css")) {
+        const link = document.createElement("link");
+        link.id = "cesium-widgets-css";
+        link.rel = "stylesheet";
+        link.href =
+          "https://cesium.com/downloads/cesiumjs/releases/1.125/Build/Cesium/Widgets/widgets.css";
+        document.head.appendChild(link);
+      }
+      (window as any).CESIUM_BASE_URL =
+        "https://cesium.com/downloads/cesiumjs/releases/1.125/Build/Cesium/";
+      Cesium.Ion.defaultAccessToken =
+        process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN ?? "";
+
+      if (destroyed || !containerRef.current) return;
+
+      // Use OSM as a free imagery provider that needs no token
+      const imagery = new Cesium.UrlTemplateImageryProvider({
+        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        credit: "© OpenStreetMap contributors",
+        maximumLevel: 19,
+      });
+      viewer = new Cesium.Viewer(containerRef.current, {
+        baseLayerPicker: false,
+        geocoder: false,
+        homeButton: false,
+        sceneModePicker: false,
+        navigationHelpButton: false,
+        timeline: false,
+        animation: false,
+        infoBox: false,
+        selectionIndicator: false,
+        fullscreenButton: false,
+        baseLayer: Cesium.ImageryLayer.fromProviderAsync(Promise.resolve(imagery), {}),
+      });
+      viewerRef.current = viewer;
+      viewer.scene.skyAtmosphere.show = true;
+      viewer.scene.fog.enabled = true;
+      viewer.scene.globe.enableLighting = true;
+      viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0a0e14");
+      viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#05070a");
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(-30, 25, 18_000_000),
+        duration: 1.2,
+      });
+
+      const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+      handler.setInputAction((click: any) => {
+        const picked = viewer.scene.pick(click.position);
+        if (picked?.id?.id) {
+          select(String(picked.id.id));
+        }
+      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    })();
+
+    return () => {
+      destroyed = true;
+      try {
+        viewerRef.current?.destroy();
+      } catch {
+        /* ignore */
+      }
+      viewerRef.current = null;
+    };
+  }, [select]);
+
+  // Sync entities with events
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const viewer = viewerRef.current;
+      if (!viewer) return;
+      const Cesium = await import("cesium");
+      if (cancelled) return;
+      const seenIds = new Set(visibleEvents.map((e) => e.id));
+      // Remove gone
+      for (const [id, ent] of entitiesRef.current.entries()) {
+        if (!seenIds.has(id)) {
+          viewer.entities.remove(ent);
+          entitiesRef.current.delete(id);
+        }
+      }
+      for (const e of visibleEvents) {
+        if (!e.geo) continue;
+        const color = severityColor(Cesium, e.severity);
+        const existing = entitiesRef.current.get(e.id);
+        if (existing) {
+          existing.position = Cesium.Cartesian3.fromDegrees(
+            e.geo.lon,
+            e.geo.lat,
+            (e.geo.alt ?? 0) > 0 ? e.geo.alt! : 0,
+          );
+          continue;
+        }
+        const ent = viewer.entities.add({
+          id: e.id,
+          name: e.title,
+          position: Cesium.Cartesian3.fromDegrees(
+            e.geo.lon,
+            e.geo.lat,
+            (e.geo.alt ?? 0) > 0 ? e.geo.alt! : 0,
+          ),
+          point: {
+            pixelSize: e.severity === "extreme" ? 12 : e.severity === "high" ? 10 : 6,
+            color,
+            outlineColor: Cesium.Color.fromCssColorString("#ffffff").withAlpha(0.5),
+            outlineWidth: 1,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          description: `${e.title}<br/><small>${e.summary ?? ""}</small>`,
+        });
+        entitiesRef.current.set(e.id, ent);
+      }
+
+      // Locations as glow rings
+      for (const loc of locations) {
+        const id = `loc-${loc.id}`;
+        if (entitiesRef.current.has(id)) continue;
+        const ring = viewer.entities.add({
+          id,
+          position: Cesium.Cartesian3.fromDegrees(loc.geo.lon, loc.geo.lat, 0),
+          ellipse: {
+            semiMajorAxis: loc.radiusKm * 1000,
+            semiMinorAxis: loc.radiusKm * 1000,
+            material: Cesium.Color.fromCssColorString("#38e0b2").withAlpha(0.08),
+            outline: true,
+            outlineColor: Cesium.Color.fromCssColorString("#38e0b2"),
+            height: 0,
+          },
+          label: {
+            text: loc.label,
+            font: "11px sans-serif",
+            fillColor: Cesium.Color.fromCssColorString("#38e0b2"),
+            pixelOffset: new Cesium.Cartesian2(0, -16),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        });
+        entitiesRef.current.set(id, ring);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visibleEvents, locations]);
+
+  // Fly-to requests
+  useEffect(() => {
+    if (!flyTo || !viewerRef.current) return;
+    (async () => {
+      const Cesium = await import("cesium");
+      viewerRef.current.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(
+          flyTo.lon,
+          flyTo.lat,
+          (flyTo.zoom ? 5_000_000 / flyTo.zoom : 800_000),
+        ),
+        duration: 1.2,
+      });
+      setFlyTo(null);
+    })();
+  }, [flyTo, setFlyTo]);
+
+  return <div ref={containerRef} className="absolute inset-0" data-agent="map-3d" />;
+}
+
+function severityColor(Cesium: any, sev: string): any {
+  const c = Cesium.Color.fromCssColorString;
+  if (sev === "extreme") return c("#ff3860");
+  if (sev === "high") return c("#ff6a3d");
+  if (sev === "moderate") return c("#ffb020");
+  if (sev === "low") return c("#5cf0c9");
+  return c("#38e0b2").withAlpha(0.85);
+}
