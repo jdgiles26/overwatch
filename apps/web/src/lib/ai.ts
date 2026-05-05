@@ -3,20 +3,84 @@
 type Message = { role: "system" | "user" | "assistant"; content: string };
 
 let _transformers: any | null = null;
+let _consoleFilterInstalled = false;
+
+/**
+ * ORT writes "W:onnxruntime: ... VerifyEachNodeIsAssignedToAnEp" warnings
+ * straight to console.error from inside the wasm runtime. Next.js's dev
+ * overlay then escalates *every* console.error into a red error toast.
+ *
+ * These messages are informational ("some ops fell back to CPU"), not failures.
+ * We swallow them at the source by:
+ *   1. Lowering ORT's log threshold (env.logLevel + per-session logSeverityLevel).
+ *   2. Installing a one-time console.error filter that drops the few patterns
+ *      that ORT prints below that threshold anyway.
+ */
+function installConsoleFilter() {
+  if (_consoleFilterInstalled) return;
+  if (typeof window === "undefined") return;
+  _consoleFilterInstalled = true;
+  const orig = console.error.bind(console);
+  const NOISY = [
+    /VerifyEachNodeIsAssignedToAnEp/i,
+    /some nodes were not assigned to the preferred execution providers/i,
+    /Rerunning with verbose output/i,
+    /CleanUnusedInitializersAndNodeArgs/i,
+    /\bW:onnxruntime/i,
+    /\bI:onnxruntime/i,
+    /ort-wasm/i,
+  ];
+  console.error = (...args: any[]) => {
+    try {
+      const text = args
+        .map((a) => (typeof a === "string" ? a : a?.message ?? ""))
+        .join(" ");
+      if (text && NOISY.some((re) => re.test(text))) {
+        // Re-route to debug so it stays visible in the console but doesn't
+        // trigger Next.js's dev overlay.
+        console.debug("[ort]", ...args);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    orig(...args);
+  };
+}
 
 async function getTransformers() {
   if (_transformers) return _transformers;
-  // Dynamic import keeps it out of the SSR/build path.
+  installConsoleFilter();
   const mod = await import("@huggingface/transformers");
-  mod.env.allowLocalModels = false;
-  mod.env.useBrowserCache = true;
-  // Multi-threaded WASM if SAB is available; otherwise single-thread fallback.
-  if (typeof SharedArrayBuffer === "undefined") {
-    if (mod.env.backends?.onnx?.wasm) mod.env.backends.onnx.wasm.numThreads = 1;
+  const env: any = mod.env;
+  env.allowLocalModels = false;
+  env.useBrowserCache = true;
+  // Lower ORT's global log level. Accepts: "verbose" | "info" | "warning" | "error" | "fatal"
+  try {
+    env.logLevel = "error";
+    if (env.backends?.onnx) {
+      env.backends.onnx.logLevel = "error";
+      if (env.backends.onnx.wasm) {
+        env.backends.onnx.wasm.logLevel = "error";
+        if (typeof SharedArrayBuffer === "undefined") {
+          env.backends.onnx.wasm.numThreads = 1;
+        }
+      }
+      if (env.backends.onnx.webgpu) {
+        env.backends.onnx.webgpu.logLevel = "error";
+      }
+    }
+  } catch {
+    /* older builds may reject these fields; ignore */
   }
   _transformers = mod;
   return mod;
 }
+
+const SESSION_OPTIONS = {
+  logSeverityLevel: 3, // 0 verbose, 1 info, 2 warning, 3 error, 4 fatal
+  logVerbosityLevel: 0,
+};
 
 export async function detectDevice(): Promise<"webgpu" | "wasm"> {
   if (typeof navigator !== "undefined" && (navigator as any).gpu) {
@@ -37,33 +101,79 @@ export interface RunChatArgs {
   onDevice?: (d: "webgpu" | "wasm") => void;
   onToken?: (tok: string) => void;
   maxNewTokens?: number;
+  temperature?: number;
+}
+
+export interface RunChatHandle {
+  /** Resolves to the full generated text when generation finishes (or is stopped). */
+  done: Promise<string>;
+  /** Aborts generation early. */
+  stop: () => void;
 }
 
 const _pipelineCache = new Map<string, any>();
+const _pipelineLoading = new Map<string, Promise<any>>();
 
-export async function runChat(args: RunChatArgs): Promise<{ stop: () => void }> {
-  const { pipeline, TextStreamer } = await getTransformers();
+export async function getOrCreatePipeline(
+  task: string,
+  model: string,
+  device: "webgpu" | "wasm",
+  dtype: string,
+  onProgress?: (msg: string) => void,
+): Promise<any> {
+  const { pipeline } = await getTransformers();
+  const cacheKey = `${task}:${model}:${device}:${dtype}`;
+  const cached = _pipelineCache.get(cacheKey);
+  if (cached) return cached;
+  const loading = _pipelineLoading.get(cacheKey);
+  if (loading) return loading;
+  const promise = (async () => {
+    onProgress?.(`Loading ${model} on ${device}…`);
+    try {
+      const p = await pipeline(task, model, {
+        device,
+        dtype,
+        session_options: SESSION_OPTIONS,
+        progress_callback: (cb: any) => {
+          if (cb?.status === "progress" && cb?.progress != null) {
+            onProgress?.(`Loading ${cb.file ?? model}: ${Math.round(cb.progress)}%`);
+          } else if (cb?.status === "ready") {
+            onProgress?.("Model ready");
+          } else if (cb?.status === "download") {
+            onProgress?.(`Downloading ${cb.file ?? model}`);
+          } else if (cb?.status === "initiate") {
+            onProgress?.(`Fetching ${cb.file ?? model}`);
+          }
+        },
+      });
+      _pipelineCache.set(cacheKey, p);
+      return p;
+    } catch (e) {
+      // Don't poison the cache; allow fallback path to proceed.
+      if (device === "webgpu") {
+        onProgress?.("WebGPU init failed; falling back to WASM…");
+        return getOrCreatePipeline(task, model, "wasm", "q4", onProgress);
+      }
+      throw e;
+    } finally {
+      _pipelineLoading.delete(cacheKey);
+    }
+  })();
+  _pipelineLoading.set(cacheKey, promise);
+  return promise;
+}
+
+export async function runChat(args: RunChatArgs): Promise<RunChatHandle> {
+  const { TextStreamer, InterruptableStoppingCriteria } = await getTransformers();
   const device = await detectDevice();
   args.onDevice?.(device);
-  const cacheKey = `chat:${args.model}:${device}`;
-  let generator = _pipelineCache.get(cacheKey);
-  if (!generator) {
-    args.onProgress?.(`Loading ${args.model} on ${device}…`);
-    generator = await pipeline("text-generation", args.model, {
-      device,
-      dtype: device === "webgpu" ? "q4f16" : "q4",
-      progress_callback: (p: any) => {
-        if (p?.status === "progress" && p?.progress != null) {
-          args.onProgress?.(
-            `Loading ${p.file ?? args.model}: ${Math.round(p.progress)}%`,
-          );
-        } else if (p?.status === "ready") {
-          args.onProgress?.("Model ready");
-        }
-      },
-    });
-    _pipelineCache.set(cacheKey, generator);
-  }
+  const generator = await getOrCreatePipeline(
+    "text-generation",
+    args.model,
+    device,
+    device === "webgpu" ? "q4f16" : "q4",
+    args.onProgress,
+  );
 
   const prompt = generator.tokenizer.apply_chat_template(args.messages, {
     tokenize: false,
@@ -71,49 +181,74 @@ export async function runChat(args: RunChatArgs): Promise<{ stop: () => void }> 
   });
 
   let aborted = false;
-  const stopper = { stop: () => (aborted = true) };
+  let acc = "";
+  const stopping = InterruptableStoppingCriteria
+    ? new InterruptableStoppingCriteria()
+    : null;
 
   const streamer = new TextStreamer(generator.tokenizer, {
     skip_prompt: true,
     skip_special_tokens: true,
     callback_function: (text: string) => {
       if (aborted) return;
-      if (text) args.onToken?.(text);
+      if (text) {
+        acc += text;
+        args.onToken?.(text);
+      }
     },
   });
 
-  generator(prompt, {
-    max_new_tokens: args.maxNewTokens ?? 256,
-    do_sample: true,
-    temperature: 0.5,
-    top_p: 0.9,
-    repetition_penalty: 1.05,
-    streamer,
-  }).catch((e: any) => args.onProgress?.(`Error: ${e?.message ?? e}`));
+  const done = new Promise<string>((resolve) => {
+    const opts: any = {
+      max_new_tokens: args.maxNewTokens ?? 256,
+      do_sample: true,
+      temperature: args.temperature ?? 0.5,
+      top_p: 0.9,
+      repetition_penalty: 1.05,
+      streamer,
+    };
+    if (stopping) opts.stopping_criteria = stopping;
+    generator(prompt, opts)
+      .then((out: any) => {
+        if (!acc) {
+          // Some pipelines don't stream; fall back to the final text.
+          const text =
+            Array.isArray(out)
+              ? out.map((o: any) => o.generated_text).join("")
+              : out?.[0]?.generated_text ?? out?.generated_text ?? "";
+          acc = typeof text === "string" ? text : "";
+          if (acc) args.onToken?.(acc);
+        }
+        resolve(acc);
+      })
+      .catch((e: any) => {
+        args.onProgress?.(`Error: ${e?.message ?? e}`);
+        resolve(acc);
+      });
+  });
 
-  return stopper;
+  return {
+    done,
+    stop: () => {
+      aborted = true;
+      stopping?.interrupt();
+    },
+  };
 }
 
 export async function runVisionCaption(args: {
   blob: Blob;
   onProgress?: (msg: string) => void;
 }): Promise<string> {
-  const { pipeline, RawImage } = await getTransformers();
+  const { RawImage } = await getTransformers();
   const device = await detectDevice();
-  const cacheKey = `caption:${device}`;
-  let captioner = _pipelineCache.get(cacheKey);
-  if (!captioner) {
-    args.onProgress?.("Loading vision model…");
-    captioner = await pipeline("image-to-text", "Xenova/vit-gpt2-image-captioning", {
-      device,
-      progress_callback: (p: any) => {
-        if (p?.status === "progress" && p?.progress != null) {
-          args.onProgress?.(`Loading: ${Math.round(p.progress)}%`);
-        }
-      },
-    });
-    _pipelineCache.set(cacheKey, captioner);
-  }
+  const captioner = await getOrCreatePipeline(
+    "image-to-text",
+    "Xenova/vit-gpt2-image-captioning",
+    device,
+    device === "webgpu" ? "fp16" : "q8",
+    args.onProgress,
+  );
   const url = URL.createObjectURL(args.blob);
   try {
     const img = await RawImage.read(url);

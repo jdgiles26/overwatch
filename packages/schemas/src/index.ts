@@ -117,6 +117,41 @@ export const CameraFeed = z.object({
 });
 export type CameraFeed = z.infer<typeof CameraFeed>;
 
+export const AlertRuleCondition = z.object({
+  categories: z.array(EventCategory).optional(),
+  minSeverity: Severity.optional(),
+  keywords: z.array(z.string()).default([]),
+  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
+  nearLocationId: z.string().optional(),
+  nearKm: z.number().optional(),
+  rateLimitMs: z.number().default(60_000),
+});
+export type AlertRuleCondition = z.infer<typeof AlertRuleCondition>;
+
+export const AlertRule = z.object({
+  id: z.string(),
+  label: z.string(),
+  enabled: z.boolean().default(true),
+  notify: z.object({
+    desktop: z.boolean().default(true),
+    sound: z.boolean().default(true),
+    soundKind: z.enum(["chime", "siren", "tone", "none"]).default("chime"),
+    severityFloor: Severity.default("moderate"),
+  }),
+  condition: AlertRuleCondition,
+});
+export type AlertRule = z.infer<typeof AlertRule>;
+
+export const AlertFiring = z.object({
+  id: z.string(),
+  ruleId: z.string(),
+  ruleLabel: z.string(),
+  event: IngestEvent,
+  firedAt: z.string().datetime(),
+  reason: z.string(),
+});
+export type AlertFiring = z.infer<typeof AlertFiring>;
+
 export const ServerToClient = z.discriminatedUnion("type", [
   z.object({ type: z.literal("event"), data: IngestEvent }),
   z.object({ type: z.literal("status"), data: z.array(ConnectorStatus) }),
@@ -124,6 +159,8 @@ export const ServerToClient = z.discriminatedUnion("type", [
   z.object({ type: z.literal("pir"), data: z.array(PIR) }),
   z.object({ type: z.literal("hello"), data: z.object({ sessionId: z.string(), ts: z.string() }) }),
   z.object({ type: z.literal("snapshot"), data: z.object({ events: z.array(IngestEvent) }) }),
+  z.object({ type: z.literal("alert"), data: AlertFiring }),
+  z.object({ type: z.literal("rules"), data: z.array(AlertRule) }),
 ]);
 export type ServerToClient = z.infer<typeof ServerToClient>;
 

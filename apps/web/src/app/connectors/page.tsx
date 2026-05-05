@@ -137,7 +137,7 @@ export default function ConnectorsPage() {
           </div>
         </div>
 
-        <section className="panel p-3">
+        <section className="panel p-3" data-agent="active-instances">
           <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-white/50">
             <PlugZap className="h-3 w-3" /> Active instances · {status.length}
           </div>

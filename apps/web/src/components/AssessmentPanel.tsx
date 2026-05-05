@@ -22,7 +22,7 @@ export function AssessmentPanel() {
       className="scrollable flex h-full min-h-0 w-80 flex-col gap-3 overflow-y-auto border-l border-white/5 bg-ink-900/50 p-3"
       data-agent="assessment-panel"
     >
-      <div className="panel p-3">
+      <div className="panel p-3" data-agent="threatcon-card">
         <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-white/50">
           <ShieldAlert className="h-3.5 w-3.5" />
           THREATCON
@@ -76,7 +76,7 @@ export function AssessmentPanel() {
         )}
       </div>
 
-      <div className="panel p-3">
+      <div className="panel p-3" data-agent="pir-card">
         <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-white/50">
           <Sparkles className="h-3.5 w-3.5" />
           Priority Intelligence
@@ -111,7 +111,7 @@ export function AssessmentPanel() {
         </ul>
       </div>
 
-      <div className="panel p-3">
+      <div className="panel p-3" data-agent="source-health-card">
         <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-white/50">
           <CheckCircle2 className="h-3.5 w-3.5" />
           Source Health

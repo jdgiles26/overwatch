@@ -100,6 +100,32 @@ db.exec(`
     radius_km REAL,
     kind TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS alert_rules (
+    id TEXT PRIMARY KEY,
+    label TEXT,
+    enabled INTEGER DEFAULT 1,
+    notify TEXT,
+    condition TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS alert_firings (
+    id TEXT PRIMARY KEY,
+    rule_id TEXT,
+    rule_label TEXT,
+    event_id TEXT,
+    fired_at TEXT,
+    reason TEXT,
+    payload TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS aois (
+    id TEXT PRIMARY KEY,
+    label TEXT,
+    polygon TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_firings_at ON alert_firings(fired_at DESC);
 `);
 
 const insertEvent = db.prepare(`
@@ -225,4 +251,83 @@ export function upsertLocation(l: any) {
 
 export function deleteLocation(id: string) {
   db.prepare(`DELETE FROM locations WHERE id = ?`).run(id);
+}
+
+// ---------- Alert rules ----------
+export function listRules(): any[] {
+  const rows = db.prepare(`SELECT * FROM alert_rules`).all() as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    label: r.label,
+    enabled: !!r.enabled,
+    notify: r.notify ? JSON.parse(r.notify) : {},
+    condition: r.condition ? JSON.parse(r.condition) : {},
+  }));
+}
+
+export function upsertRule(r: any) {
+  db.prepare(
+    `INSERT OR REPLACE INTO alert_rules (id, label, enabled, notify, condition) VALUES (?,?,?,?,?)`,
+  ).run(
+    r.id,
+    r.label,
+    r.enabled ? 1 : 0,
+    JSON.stringify(r.notify ?? {}),
+    JSON.stringify(r.condition ?? {}),
+  );
+}
+
+export function deleteRule(id: string) {
+  db.prepare(`DELETE FROM alert_rules WHERE id = ?`).run(id);
+}
+
+export function listFirings(limit = 100): any[] {
+  const rows = db
+    .prepare(`SELECT * FROM alert_firings ORDER BY fired_at DESC LIMIT ?`)
+    .all(limit) as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    ruleId: r.rule_id,
+    ruleLabel: r.rule_label,
+    eventId: r.event_id,
+    firedAt: r.fired_at,
+    reason: r.reason,
+    event: r.payload ? JSON.parse(r.payload) : undefined,
+  }));
+}
+
+export function recordFiring(f: any) {
+  db.prepare(
+    `INSERT OR REPLACE INTO alert_firings (id, rule_id, rule_label, event_id, fired_at, reason, payload) VALUES (?,?,?,?,?,?,?)`,
+  ).run(
+    f.id,
+    f.ruleId,
+    f.ruleLabel,
+    f.event?.id ?? null,
+    f.firedAt,
+    f.reason,
+    JSON.stringify(f.event ?? null),
+  );
+}
+
+// ---------- AOIs ----------
+export function listAois(): any[] {
+  const rows = db.prepare(`SELECT * FROM aois`).all() as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    label: r.label,
+    polygon: r.polygon ? JSON.parse(r.polygon) : [],
+  }));
+}
+
+export function upsertAoi(a: any) {
+  db.prepare(`INSERT OR REPLACE INTO aois (id, label, polygon) VALUES (?,?,?)`).run(
+    a.id,
+    a.label,
+    JSON.stringify(a.polygon ?? []),
+  );
+}
+
+export function deleteAoi(id: string) {
+  db.prepare(`DELETE FROM aois WHERE id = ?`).run(id);
 }

@@ -16,16 +16,29 @@ export function CameraTile({
   const [theater, setTheater] = useState(false);
   const [detections, setDetections] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"connecting" | "live" | "offline">(
+    "connecting",
+  );
 
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
 
     let stream: MediaStream | null = null;
+    let pc: RTCPeerConnection | null = null;
+    let hls: any = null;
     let cancelled = false;
+
+    const onPlaying = () => setStatus("live");
+    const onError = () => setStatus("offline");
+    v.addEventListener("playing", onPlaying);
+    v.addEventListener("error", onError);
+    v.addEventListener("stalled", onError);
 
     async function start() {
       try {
+        setStatus("connecting");
+        setError(null);
         if (camera.kind === "webcam") {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { width: 640, height: 360 },
@@ -34,30 +47,62 @@ export function CameraTile({
           if (cancelled) return;
           v!.srcObject = stream;
           await v!.play();
-        } else if (camera.kind === "hls" || camera.kind === "mjpeg") {
+        } else if (camera.kind === "mjpeg") {
           v!.src = camera.source;
           v!.crossOrigin = "anonymous";
           await v!.play().catch(() => undefined);
+        } else if (camera.kind === "hls") {
+          if (v!.canPlayType("application/vnd.apple.mpegurl")) {
+            v!.src = camera.source;
+            v!.crossOrigin = "anonymous";
+            await v!.play().catch(() => undefined);
+          } else {
+            const Hls = (await import("hls.js")).default;
+            if (Hls.isSupported()) {
+              hls = new Hls({ liveSyncDurationCount: 2, lowLatencyMode: true });
+              hls.attachMedia(v!);
+              hls.loadSource(camera.source);
+              hls.on(Hls.Events.ERROR, (_e: any, d: any) => {
+                if (d?.fatal) {
+                  setError(`HLS ${d.type}: ${d.details}`);
+                  setStatus("offline");
+                }
+              });
+            } else {
+              throw new Error("HLS not supported in this browser");
+            }
+          }
         } else if (camera.kind === "rtsp") {
-          // go2rtc WHEP endpoint (default name = camera id)
           const whep =
             camera.whepUrl ??
             `${process.env.NEXT_PUBLIC_GO2RTC_URL ?? "http://localhost:1984"}/api/webrtc?src=${encodeURIComponent(
               camera.id,
             )}`;
-          await playWhep(v!, whep);
-        } else if (camera.kind === "youtube") {
-          // handled in JSX as iframe
+          pc = await playWhep(v!, whep);
         }
       } catch (e: any) {
         setError(e.message ?? String(e));
+        setStatus("offline");
       }
     }
     start();
 
     return () => {
       cancelled = true;
+      v.removeEventListener("playing", onPlaying);
+      v.removeEventListener("error", onError);
+      v.removeEventListener("stalled", onError);
       if (stream) for (const t of stream.getTracks()) t.stop();
+      try {
+        hls?.destroy();
+      } catch {
+        /* ignore */
+      }
+      try {
+        pc?.close();
+      } catch {
+        /* ignore */
+      }
       try {
         v.pause();
       } catch {
@@ -146,8 +191,21 @@ export function CameraTile({
         )}
         <canvas ref={canvasRef} className="hidden" />
         <div className="absolute inset-x-1 top-1 flex items-center gap-1 text-[10px]">
-          <span className="rounded bg-black/60 px-1 py-0.5 backdrop-blur">
-            ● {camera.label}
+          <span className="flex items-center gap-1 rounded bg-black/60 px-1 py-0.5 backdrop-blur">
+            <span
+              className={
+                "h-1.5 w-1.5 rounded-full " +
+                (status === "live"
+                  ? "bg-accent-400 animate-pulse"
+                  : status === "offline"
+                  ? "bg-threat-high"
+                  : "bg-white/40 animate-pulse")
+              }
+            />
+            {camera.label}
+          </span>
+          <span className="rounded bg-black/40 px-1 py-0.5 text-[9px] uppercase">
+            {camera.kind}
           </span>
           {detections > 0 && (
             <span className="rounded bg-threat-elevated/80 px-1 py-0.5 text-black">
@@ -206,7 +264,7 @@ export function CameraTile({
   );
 }
 
-async function playWhep(video: HTMLVideoElement, whepUrl: string) {
+async function playWhep(video: HTMLVideoElement, whepUrl: string): Promise<RTCPeerConnection> {
   const pc = new RTCPeerConnection({
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   });
@@ -222,9 +280,10 @@ async function playWhep(video: HTMLVideoElement, whepUrl: string) {
   const ans = await fetch(whepUrl, {
     method: "POST",
     headers: { "content-type": "application/sdp" },
-    body: offer.sdp,
+    body: offer.sdp ?? "",
   });
-  if (!ans.ok) throw new Error(`WHEP ${ans.status}`);
+  if (!ans.ok) throw new Error(`WHEP ${ans.status} (${whepUrl})`);
   const sdp = await ans.text();
   await pc.setRemoteDescription({ type: "answer", sdp });
+  return pc;
 }

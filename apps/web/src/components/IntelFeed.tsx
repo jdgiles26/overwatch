@@ -49,7 +49,11 @@ export function IntelFeed() {
   const select = useStore((s) => s.selectEvent);
   const flyTo = useStore((s) => s.requestFlyTo);
 
-  const filtered = useMemo(() => applyFilter(events, filter), [events, filter]);
+  const timeWindow = useStore((s) => s.timeWindow);
+  const filtered = useMemo(
+    () => applyFilter(events, filter, timeWindow),
+    [events, filter, timeWindow],
+  );
 
   return (
     <div
