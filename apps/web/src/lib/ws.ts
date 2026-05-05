@@ -1,6 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { useStore } from "./store";
+import { playSound, showDesktopNotification } from "./notify";
 
 export function useFabricSocket() {
   const addEvent = useStore((s) => s.addEvent);
@@ -9,6 +10,8 @@ export function useFabricSocket() {
   const setThreatCon = useStore((s) => s.setThreatCon);
   const setPIR = useStore((s) => s.setPIR);
   const setWsConnected = useStore((s) => s.setWsConnected);
+  const setRules = useStore((s) => s.setRules);
+  const pushFiring = useStore((s) => s.pushFiring);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -32,6 +35,24 @@ export function useFabricSocket() {
           else if (msg.type === "status") setStatus(msg.data);
           else if (msg.type === "threatcon") setThreatCon(msg.data);
           else if (msg.type === "pir") setPIR(msg.data);
+          else if (msg.type === "rules") setRules(msg.data);
+          else if (msg.type === "alert") {
+            const f = msg.data;
+            pushFiring(f);
+            const rule = useStore.getState().rules.find((r) => r.id === f.ruleId);
+            if (rule?.notify?.sound) playSound(rule.notify.soundKind ?? "chime");
+            if (rule?.notify?.desktop) {
+              const ev = f.event ?? {};
+              const where = ev.geo
+                ? ` @ ${ev.geo.lat.toFixed(2)},${ev.geo.lon.toFixed(2)}`
+                : "";
+              showDesktopNotification(
+                `${f.ruleLabel}`,
+                `${ev.severity?.toUpperCase?.() ?? ""} ${ev.title ?? "alert"}${where}`,
+                { tag: f.ruleId },
+              );
+            }
+          }
         } catch {
           /* ignore */
         }
@@ -57,5 +78,14 @@ export function useFabricSocket() {
       closed = true;
       ws?.close();
     };
-  }, [addEvent, setEvents, setStatus, setThreatCon, setPIR, setWsConnected]);
+  }, [
+    addEvent,
+    setEvents,
+    setStatus,
+    setThreatCon,
+    setPIR,
+    setWsConnected,
+    setRules,
+    pushFiring,
+  ]);
 }

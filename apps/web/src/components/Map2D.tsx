@@ -2,18 +2,20 @@
 import { useEffect, useMemo, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useStore } from "@/lib/store";
+import { applyFilter, useStore } from "@/lib/store";
 
 export function Map2D() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const events = useStore((s) => s.events);
+  const filter = useStore((s) => s.filter);
+  const timeWindow = useStore((s) => s.timeWindow);
   const locations = useStore((s) => s.locations);
   const flyTo = useStore((s) => s.flyTo);
   const setFlyTo = useStore((s) => s.requestFlyTo);
 
   const features = useMemo(() => {
-    const fs = events
+    const fs = applyFilter(events, filter, timeWindow)
       .filter((e) => e.geo)
       .slice(0, 1500)
       .map((e) => ({
@@ -24,15 +26,24 @@ export function Map2D() {
           title: e.title,
           severity: e.severity,
           category: e.category,
+          weight:
+            e.severity === "extreme"
+              ? 1
+              : e.severity === "high"
+              ? 0.8
+              : e.severity === "moderate"
+              ? 0.5
+              : 0.25,
         },
       }));
     return { type: "FeatureCollection" as const, features: fs };
-  }, [events]);
+  }, [events, filter, timeWindow]);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
+      preserveDrawingBuffer: true,
       style: {
         version: 8,
         sources: {
@@ -64,9 +75,37 @@ export function Map2D() {
     map.on("load", () => {
       map.addSource("events", { type: "geojson", data: features as any });
       map.addLayer({
+        id: "events-heat",
+        type: "heatmap",
+        source: "events",
+        maxzoom: 9,
+        paint: {
+          "heatmap-weight": ["coalesce", ["get", "weight"], 0.3],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 9, 2.5],
+          "heatmap-color": [
+            "interpolate",
+            ["linear"],
+            ["heatmap-density"],
+            0,
+            "rgba(0,0,0,0)",
+            0.2,
+            "#0b3b3b",
+            0.4,
+            "#5cf0c9",
+            0.7,
+            "#ffb020",
+            1.0,
+            "#ff3860",
+          ],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 8, 9, 28],
+          "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.85, 9, 0.0],
+        },
+      });
+      map.addLayer({
         id: "events-circle",
         type: "circle",
         source: "events",
+        minzoom: 4,
         paint: {
           "circle-radius": [
             "match",
@@ -99,6 +138,19 @@ export function Map2D() {
           "circle-stroke-opacity": 0.5,
         },
       });
+      map.on("click", "events-circle", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const id = f.properties?.id;
+        if (id) useStore.getState().selectEvent(String(id));
+      });
+      map.on("mouseenter", "events-circle", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "events-circle", () => {
+        map.getCanvas().style.cursor = "";
+      });
+
       map.addSource("locations", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },

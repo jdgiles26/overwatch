@@ -1,0 +1,12 @@
+{
+  "name": "OverWatch",
+  "short_name": "OverWatch",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05070a",
+  "theme_color": "#0b1e1e",
+  "description": "Tactical OSINT + IoT data fabric with on-device AI",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

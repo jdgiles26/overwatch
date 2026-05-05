@@ -1,6 +1,8 @@
 "use client";
 import { create } from "zustand";
 import type {
+  AlertFiring,
+  AlertRule,
   CameraFeed,
   ConnectorStatus,
   IngestEvent,
@@ -32,6 +34,12 @@ export type Store = {
   wsConnected: boolean;
   selectedEventId: string | null;
   flyTo: { lat: number; lon: number; zoom?: number } | null;
+  rules: AlertRule[];
+  firings: AlertFiring[];
+  // DVR / time machine
+  timeWindow: { from: number; to: number } | null; // null = live
+  // entity follow
+  followEntity: { kind: "icao24" | "id"; value: string } | null;
 
   setView: (v: View) => void;
   setNightVision: (v: boolean) => void;
@@ -51,6 +59,10 @@ export type Store = {
   clearFilters: () => void;
   selectEvent: (id: string | null) => void;
   requestFlyTo: (x: { lat: number; lon: number; zoom?: number } | null) => void;
+  setRules: (r: AlertRule[]) => void;
+  pushFiring: (f: AlertFiring) => void;
+  setTimeWindow: (w: { from: number; to: number } | null) => void;
+  setFollowEntity: (e: { kind: "icao24" | "id"; value: string } | null) => void;
 };
 
 export const useStore = create<Store>((set, get) => ({
@@ -68,6 +80,10 @@ export const useStore = create<Store>((set, get) => ({
   wsConnected: false,
   selectedEventId: null,
   flyTo: null,
+  rules: [],
+  firings: [],
+  timeWindow: null,
+  followEntity: null,
 
   setView: (v) => set({ view: v }),
   setNightVision: (v) => set({ nightVision: v }),
@@ -108,11 +124,24 @@ export const useStore = create<Store>((set, get) => ({
     set({ filter: { categories: new Set(), severities: new Set(), query: "" } }),
   selectEvent: (id) => set({ selectedEventId: id }),
   requestFlyTo: (x) => set({ flyTo: x }),
+  setRules: (rules) => set({ rules }),
+  pushFiring: (f) => set({ firings: [f, ...get().firings].slice(0, 200) }),
+  setTimeWindow: (w) => set({ timeWindow: w }),
+  setFollowEntity: (e) => set({ followEntity: e }),
 }));
 
-export function applyFilter(events: IngestEvent[], f: FilterState): IngestEvent[] {
+export function applyFilter(
+  events: IngestEvent[],
+  f: FilterState,
+  timeWindow?: { from: number; to: number } | null,
+): IngestEvent[] {
   const q = f.query.trim().toLowerCase();
   return events.filter((e) => {
+    if (timeWindow) {
+      const t = new Date(e.occurredAt).getTime();
+      if (!Number.isFinite(t)) return false;
+      if (t < timeWindow.from || t > timeWindow.to) return false;
+    }
     if (f.categories.size && !f.categories.has(e.category)) return false;
     if (f.severities.size && !f.severities.has(e.severity)) return false;
     if (q) {

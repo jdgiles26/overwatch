@@ -40,12 +40,14 @@ export function CameraStrip() {
   }, [setCameras]);
 
   async function addCamera() {
-    if (!draft.label || !draft.source) return;
+    if (!draft.label) return;
+    const isWebcam = draft.kind === "webcam";
+    if (!isWebcam && !draft.source) return;
     const id = `cam-${Date.now()}`;
     const cam: any = {
       id,
       label: draft.label,
-      source: draft.source,
+      source: draft.source ?? "browser:webcam",
       kind: draft.kind ?? "rtsp",
       lat: (draft as any).lat,
       lon: (draft as any).lon,
@@ -131,11 +133,33 @@ export function CameraStrip() {
               <Field label="Source URL" full>
                 <input
                   className="input"
-                  placeholder="rtsp://… or https://…/stream.m3u8"
+                  placeholder={
+                    draft.kind === "webcam"
+                      ? "(unused for webcam)"
+                      : "rtsp://… or https://…/stream.m3u8"
+                  }
                   value={draft.source ?? ""}
                   onChange={(e) => setDraft({ ...draft, source: e.target.value })}
+                  disabled={draft.kind === "webcam"}
                 />
+                {draft.kind === "rtsp" && (
+                  <div className="mt-1 text-[10px] text-white/40">
+                    RTSP is proxied through go2rtc → WHEP. Make sure go2rtc is
+                    running on {process.env.NEXT_PUBLIC_GO2RTC_URL ?? "http://localhost:1984"}
+                    .
+                  </div>
+                )}
               </Field>
+              {draft.kind !== "webcam" && (
+                <Field label="WHEP URL (optional override)" full>
+                  <input
+                    className="input"
+                    placeholder="http://localhost:1984/api/webrtc?src=<stream>"
+                    value={draft.whepUrl ?? ""}
+                    onChange={(e) => setDraft({ ...draft, whepUrl: e.target.value })}
+                  />
+                </Field>
+              )}
               <Field label="Lat">
                 <input
                   className="input"

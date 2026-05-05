@@ -24,8 +24,11 @@ export function TopBar() {
   const wsConnected = useStore((s) => s.wsConnected);
   const status = useStore((s) => s.status);
   const threatcon = useStore((s) => s.threatcon);
+  const firings = useStore((s) => s.firings);
+  const rules = useStore((s) => s.rules);
 
   const active = status.filter((s) => s.enabled && s.connected).length;
+  const recentFirings = firings.slice(0, 3);
 
   return (
     <header
@@ -128,6 +131,23 @@ export function TopBar() {
         >
           <Eye className="h-3 w-3" /> Overseer
         </button>
+        <a
+          href="/rules"
+          className={cn(
+            "badge gap-1 hover:bg-white/10",
+            recentFirings.length > 0 && "text-amber-300",
+          )}
+          data-agent="nav-rules"
+          title={recentFirings.map((f) => f.ruleLabel).join(" · ") || "alert rules"}
+        >
+          <ShieldAlert className="h-3 w-3" />
+          Rules{rules.length ? ` (${rules.length})` : ""}
+          {recentFirings.length > 0 && (
+            <span className="ml-1 rounded bg-amber-300/20 px-1 text-[10px]">
+              {recentFirings.length}
+            </span>
+          )}
+        </a>
         <a
           href="/connectors"
           className="badge hover:bg-white/10"

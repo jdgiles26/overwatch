@@ -1,22 +1,55 @@
 "use client";
 import { useEffect, useMemo, useRef } from "react";
-import { useStore } from "@/lib/store";
+import { applyFilter, useStore } from "@/lib/store";
 import type { IngestEvent } from "@overwatch/schemas";
 
 export function Map3D() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<any>(null);
   const entitiesRef = useRef<Map<string, any>>(new Map());
+  const trailsRef = useRef<Map<string, any>>(new Map());
   const events = useStore((s) => s.events);
+  const filter = useStore((s) => s.filter);
+  const timeWindow = useStore((s) => s.timeWindow);
+  const followEntity = useStore((s) => s.followEntity);
   const locations = useStore((s) => s.locations);
   const flyTo = useStore((s) => s.flyTo);
   const setFlyTo = useStore((s) => s.requestFlyTo);
   const select = useStore((s) => s.selectEvent);
 
   const visibleEvents = useMemo(
-    () => events.filter((e) => e.geo).slice(0, 1500),
-    [events],
+    () =>
+      applyFilter(events, filter, timeWindow)
+        .filter((e) => e.geo)
+        .slice(0, 1500),
+    [events, filter, timeWindow],
   );
+
+  // Build per-aircraft trails from successive ADS-B pings.
+  const aircraftTrails = useMemo(() => {
+    const byIcao = new Map<string, IngestEvent[]>();
+    for (const e of events) {
+      if (!e.geo) continue;
+      const id = e.payload?.icao24;
+      if (!id) continue;
+      const arr = byIcao.get(id) ?? [];
+      arr.push(e);
+      byIcao.set(id, arr);
+    }
+    const trails: { id: string; path: [number, number][] }[] = [];
+    for (const [id, arr] of byIcao) {
+      if (arr.length < 2) continue;
+      arr.sort(
+        (a, b) =>
+          new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime(),
+      );
+      const path = arr
+        .slice(-12)
+        .map((e) => [e.geo!.lon, e.geo!.lat] as [number, number]);
+      trails.push({ id, path });
+    }
+    return trails.slice(0, 30);
+  }, [events]);
 
   useEffect(() => {
     let destroyed = false;
@@ -56,8 +89,18 @@ export function Map3D() {
         infoBox: false,
         selectionIndicator: false,
         fullscreenButton: false,
+        // preserveDrawingBuffer + alpha lets us snapshot the WebGL canvas later.
+        contextOptions: {
+          webgl: { preserveDrawingBuffer: true, alpha: true },
+        },
         baseLayer: Cesium.ImageryLayer.fromProviderAsync(Promise.resolve(imagery), {}),
       });
+      // Mark the underlying canvas for the Overseer agent.
+      try {
+        viewer.scene.canvas.dataset.agent = "map-3d-canvas";
+      } catch {
+        /* ignore */
+      }
       viewerRef.current = viewer;
       viewer.scene.skyAtmosphere.show = true;
       viewer.scene.fog.enabled = true;
@@ -137,6 +180,36 @@ export function Map3D() {
         entitiesRef.current.set(e.id, ent);
       }
 
+      // Aircraft trails (polylines per ICAO24)
+      const trailIds = new Set(aircraftTrails.map((t) => `trail-${t.id}`));
+      for (const [tid, ent] of trailsRef.current) {
+        if (!trailIds.has(tid)) {
+          viewer.entities.remove(ent);
+          trailsRef.current.delete(tid);
+        }
+      }
+      for (const t of aircraftTrails) {
+        const tid = `trail-${t.id}`;
+        const positions = Cesium.Cartesian3.fromDegreesArray(
+          t.path.flatMap((p) => p),
+        );
+        const existing = trailsRef.current.get(tid);
+        if (existing) {
+          existing.polyline.positions = positions;
+          continue;
+        }
+        const ent = viewer.entities.add({
+          id: tid,
+          polyline: {
+            positions,
+            width: 2,
+            material: Cesium.Color.fromCssColorString("#5cf0c9").withAlpha(0.55),
+            clampToGround: false,
+          },
+        });
+        trailsRef.current.set(tid, ent);
+      }
+
       // Locations as glow rings
       for (const loc of locations) {
         const id = `loc-${loc.id}`;
@@ -166,7 +239,27 @@ export function Map3D() {
     return () => {
       cancelled = true;
     };
-  }, [visibleEvents, locations]);
+  }, [visibleEvents, locations, aircraftTrails]);
+
+  // Follow an aircraft if requested.
+  useEffect(() => {
+    if (!followEntity || followEntity.kind !== "icao24") return;
+    const recent = events.find(
+      (e) => e.payload?.icao24 === followEntity.value && e.geo,
+    );
+    if (!recent || !recent.geo || !viewerRef.current) return;
+    (async () => {
+      const Cesium = await import("cesium");
+      viewerRef.current.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(
+          recent.geo!.lon,
+          recent.geo!.lat,
+          200_000,
+        ),
+        duration: 1.0,
+      });
+    })();
+  }, [followEntity, events]);
 
   // Fly-to requests
   useEffect(() => {

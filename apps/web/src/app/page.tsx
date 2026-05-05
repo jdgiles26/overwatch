@@ -7,6 +7,9 @@ import { AssessmentPanel } from "@/components/AssessmentPanel";
 import { CameraStrip } from "@/components/CameraStrip";
 import { AnalystPanel } from "@/components/AnalystPanel";
 import { OverseerPanel } from "@/components/OverseerPanel";
+import { EventDetail } from "@/components/EventDetail";
+import { TimeScrubber } from "@/components/TimeScrubber";
+import { CommandPalette } from "@/components/CommandPalette";
 import { useFabricSocket } from "@/lib/ws";
 import { useStore } from "@/lib/store";
 import { apiGet } from "@/lib/api";
@@ -42,6 +45,8 @@ export default function HomePage() {
         <main className="relative flex min-h-0 flex-1 flex-col">
           <div className="relative flex-1 tactical-grid">
             <MapView />
+            <EventDetail />
+            <TimeScrubber />
             <AnalystPanel />
             <OverseerPanel />
           </div>
@@ -49,6 +54,7 @@ export default function HomePage() {
         </main>
         <AssessmentPanel />
       </div>
+      <CommandPalette />
     </div>
   );
 }
