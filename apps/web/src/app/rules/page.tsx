@@ -194,8 +194,8 @@ export default function RulesPage() {
           {rules.length === 0 ? (
             <div className="text-sm text-white/50">
               No rules yet. Click <strong>New rule</strong> to create one — for
-              example: "M5+ earthquake within 500km of San Francisco" or "any
-              extreme event mentioning 'evacuation'".
+              example: &ldquo;M5+ earthquake within 500km of San Francisco&rdquo; or &ldquo;any
+              extreme event mentioning &lsquo;evacuation&rsquo;&rdquo;.
             </div>
           ) : (
             <ul className="space-y-2">

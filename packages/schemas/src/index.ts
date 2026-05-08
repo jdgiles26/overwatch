@@ -26,6 +26,7 @@ export const EventCategory = z.enum([
   "fire",
   "lightning",
   "health",
+  "drone",
   "other",
 ]);
 export type EventCategory = z.infer<typeof EventCategory>;
@@ -105,15 +106,48 @@ export const PIR = z.object({
 });
 export type PIR = z.infer<typeof PIR>;
 
+export const DroneTrack = z.object({
+  id: z.string(),
+  nodeId: z.string(),
+  geo: GeoPoint,
+  rangeM: z.number(),
+  rangeErrorM: z.number(),
+  positionHistory: z.array(z.object({ geo: GeoPoint, ts: z.string() })),
+  velocityMs: z.number(),
+  headingDeg: z.number(),
+  severity: Severity,
+  state: z.enum(["active", "coasting", "expired"]),
+  lastDetectionAt: z.string(),
+  coastingSince: z.string().optional(),
+  swarmCorrelated: z.boolean(),
+});
+export type DroneTrack = z.infer<typeof DroneTrack>;
+
+export const DroneClassification = z.object({
+  trackId: z.string(),
+  label: z.enum(["hostile", "neutral", "unknown"]),
+  aggressionScore: z.number(),
+  confidence: z.number(),
+  evasionScore: z.number(),
+  loiterRatio: z.number(),
+  descentRate: z.number(),
+  payloadStability: z.number(),
+  swarmCorrelated: z.boolean(),
+  predictedPath: z.array(z.object({ lat: z.number(), lon: z.number(), alt: z.number().optional() })),
+  estimatedTarget: z.string().optional(),
+  computedAt: z.string(),
+});
+export type DroneClassification = z.infer<typeof DroneClassification>;
+
 export const CameraFeed = z.object({
   id: z.string(),
   label: z.string(),
   source: z.string(),
-  kind: z.enum(["rtsp", "hls", "mjpeg", "webcam", "youtube"]),
+  kind: z.enum(["rtsp", "hls", "mjpeg", "webcam", "youtube", "direct"]),
   geo: GeoPoint.optional(),
   whepUrl: z.string().optional(),
   hlsUrl: z.string().optional(),
-  detectors: z.array(z.enum(["motion", "person", "vehicle", "fire", "plate"])).default([]),
+  detectors: z.array(z.string()).default([]),
 });
 export type CameraFeed = z.infer<typeof CameraFeed>;
 
@@ -161,6 +195,8 @@ export const ServerToClient = z.discriminatedUnion("type", [
   z.object({ type: z.literal("snapshot"), data: z.object({ events: z.array(IngestEvent) }) }),
   z.object({ type: z.literal("alert"), data: AlertFiring }),
   z.object({ type: z.literal("rules"), data: z.array(AlertRule) }),
+  z.object({ type: z.literal("drone-track"), data: DroneTrack }),
+  z.object({ type: z.literal("drone-classification"), data: DroneClassification }),
 ]);
 export type ServerToClient = z.infer<typeof ServerToClient>;
 

@@ -3,7 +3,6 @@ import { useMemo } from "react";
 import { X, MapPin, Clock, Sparkles, ExternalLink, Plane } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
-import type { IngestEvent } from "@overwatch/schemas";
 
 function distanceKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
   const R = 6371;

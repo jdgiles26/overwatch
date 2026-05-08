@@ -173,6 +173,8 @@ export function Map2D() {
       map.remove();
       mapRef.current = null;
     };
+    // features is seeded once here; the update effect below keeps it in sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

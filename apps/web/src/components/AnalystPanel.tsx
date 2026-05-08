@@ -133,7 +133,7 @@ Be precise. Cite event titles. No filler.`;
         try {
           const { speak } = await import("@/lib/voice");
           await speak(final);
-        } catch (e) {
+        } catch {
           /* tts optional */
         }
       }

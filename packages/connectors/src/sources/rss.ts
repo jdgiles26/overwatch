@@ -11,7 +11,7 @@ const Cfg = z.object({
       "https://www.cisa.gov/cybersecurity-advisories/all.xml",
     ]),
   category: z
-    .enum(["news", "iot", "weather", "seismic", "air", "transport", "power", "water", "cv", "space", "finance", "social", "fire", "lightning", "health", "other"])
+    .enum(["news", "iot", "weather", "seismic", "air", "transport", "power", "water", "cv", "drone", "space", "finance", "social", "fire", "lightning", "health", "other"])
     .default("news"),
 });
 

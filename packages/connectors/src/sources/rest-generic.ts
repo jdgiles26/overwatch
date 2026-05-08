@@ -12,7 +12,7 @@ const Cfg = z.object({
   latKey: z.string().default("lat"),
   lonKey: z.string().default("lon"),
   category: z
-    .enum(["iot", "weather", "seismic", "air", "transport", "power", "water", "news", "cv", "space", "finance", "social", "fire", "lightning", "health", "other"])
+    .enum(["iot", "weather", "seismic", "air", "transport", "power", "water", "news", "cv", "drone", "space", "finance", "social", "fire", "lightning", "health", "other"])
     .default("iot"),
 });
 

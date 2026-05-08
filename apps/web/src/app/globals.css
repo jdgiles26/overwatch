@@ -79,3 +79,23 @@ html, body {
 .glow-ring {
   box-shadow: 0 0 0 2px rgba(56,224,178,0.3), 0 0 30px rgba(56,224,178,0.15);
 }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(56, 224, 178, 0.12);
+  border: 1px solid rgba(56, 224, 178, 0.25);
+  color: #5cf0c9;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn:hover {
+  background: rgba(56, 224, 178, 0.2);
+  border-color: rgba(56, 224, 178, 0.45);
+}

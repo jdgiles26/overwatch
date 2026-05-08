@@ -33,14 +33,29 @@ const CATS = [
   "news",
   "iot",
   "cv",
+  "drone",
   "space",
   "finance",
   "social",
 ];
 const SEVS = ["info", "low", "moderate", "high", "extreme"];
 
+// Shorten full topic labels to concise chips
+function shortTopic(t: string): string {
+  if (t.includes("infrastructure")) return "infra";
+  if (t.includes("civil unrest")) return "unrest";
+  if (t.includes("natural disaster")) return "disaster";
+  if (t.includes("cyber")) return "cyber";
+  if (t.includes("health")) return "health";
+  if (t.includes("environmental") || t.includes("chemical")) return "hazmat";
+  if (t.includes("armed conflict") || t.includes("military")) return "conflict";
+  if (t.includes("accident") || t.includes("industrial")) return "accident";
+  return t.split(" ")[0]!;
+}
+
 export function IntelFeed() {
   const events = useStore((s) => s.events);
+  const eventTopics = useStore((s) => s.eventTopics);
   const filter = useStore((s) => s.filter);
   const toggleCat = useStore((s) => s.toggleCategory);
   const toggleSev = useStore((s) => s.toggleSeverity);
@@ -147,6 +162,19 @@ export function IntelFeed() {
                       <span className="truncate">· {e.geoMentioned}</span>
                     )}
                   </div>
+                  {eventTopics[e.id]?.length ? (
+                    <div className="mt-0.5 flex flex-wrap gap-0.5">
+                      {eventTopics[e.id]!.map((t) => (
+                        <span
+                          key={t}
+                          title={t}
+                          className="rounded-sm bg-threat-elevated/15 px-1 py-px text-[9px] uppercase tracking-wide text-threat-elevated/80"
+                        >
+                          {shortTopic(t)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </button>
             </li>

@@ -23,6 +23,7 @@ import { emsc } from "./sources/emsc.js";
 import { nasaFirms } from "./sources/nasa-firms.js";
 import { restGeneric } from "./sources/rest-generic.js";
 import { simulator } from "./sources/simulator.js";
+import { droneRf } from "./sources/drone-rf.js";
 import type { Connector } from "./types.js";
 
 export {
@@ -48,6 +49,7 @@ export {
   nasaFirms,
   restGeneric,
   simulator,
+  droneRf,
 };
 
 export { getWebhookRouter } from "./sources/webhook.js";
@@ -75,6 +77,7 @@ export const ALL_CONNECTORS: Connector<any>[] = [
   nasaFirms,
   restGeneric,
   simulator,
+  droneRf,
 ];
 
 export function getConnectorById(id: string): Connector<any> | undefined {

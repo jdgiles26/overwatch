@@ -221,12 +221,21 @@ function parseAction(raw: string): { action: string; [k: string]: any } | null {
     const tryObj = tryJson(fenced[1] ?? "");
     if (tryObj) return tryObj;
   }
-  // Find any {...} that contains "action": "...".
-  const re = /\{[\s\S]*?\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(raw)) !== null) {
-    if (!m[0].includes('"action"')) continue;
-    const obj = tryJson(m[0]);
+  // Extract all top-level {...} objects, tracking brace depth to handle nesting.
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] !== "{") continue;
+    let depth = 0;
+    let j = i;
+    for (; j < raw.length; j++) {
+      if (raw[j] === "{") depth++;
+      else if (raw[j] === "}") {
+        depth--;
+        if (depth === 0) break;
+      }
+    }
+    const candidate = raw.slice(i, j + 1);
+    if (!candidate.includes('"action"')) continue;
+    const obj = tryJson(candidate);
     if (obj && typeof obj.action === "string") return obj;
   }
   return null;

@@ -49,6 +49,8 @@ export class RuleEngine extends EventEmitter {
   evaluate(event: IngestEvent): AlertFiring[] {
     const out: AlertFiring[] = [];
     const now = Date.now();
+    let _locations: any[] | null = null;
+    const getLocations = () => (_locations ??= listLocations());
     for (const rule of this.rules) {
       if (!rule.enabled) continue;
       const reasons: string[] = [];
@@ -82,7 +84,7 @@ export class RuleEngine extends EventEmitter {
       }
       if (c.nearLocationId && c.nearKm) {
         if (!event.geo) continue;
-        const loc = listLocations().find((l: any) => l.id === c.nearLocationId);
+        const loc = getLocations().find((l: any) => l.id === c.nearLocationId);
         if (!loc) continue;
         const d = distanceKm(event.geo, { lat: loc.lat, lon: loc.lon });
         if (d > c.nearKm) continue;

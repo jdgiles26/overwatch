@@ -4,7 +4,7 @@ import { defineConnector } from "../types.js";
 const Cfg = z.object({
   key: z.string().default("demo"),
   category: z
-    .enum(["iot", "weather", "seismic", "air", "transport", "power", "water", "news", "cv", "space", "finance", "social", "fire", "lightning", "health", "other"])
+    .enum(["iot", "weather", "seismic", "air", "transport", "power", "water", "news", "cv", "drone", "space", "finance", "social", "fire", "lightning", "health", "other"])
     .default("iot"),
 });
 

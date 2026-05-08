@@ -1,6 +1,5 @@
 import Database, { type Database as BetterSqliteDatabase } from "better-sqlite3";
 import * as fs from "node:fs";
-import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import crypto from "node:crypto";
 import type { IngestEvent } from "@overwatch/schemas";
@@ -20,7 +19,7 @@ function getOrMakeKey(): Buffer {
   try {
     return fs.readFileSync(KEY_PATH);
   } catch {
-    mkdirSync(dirname(KEY_PATH), { recursive: true });
+    fs.mkdirSync(dirname(KEY_PATH), { recursive: true });
     const k = crypto.randomBytes(32);
     fs.writeFileSync(KEY_PATH, k, { mode: 0o600 });
     return k;
@@ -47,7 +46,7 @@ export function decrypt(b64: string): string {
   return Buffer.concat([d.update(enc), d.final()]).toString("utf8");
 }
 
-mkdirSync(dirname(DB_PATH), { recursive: true });
+fs.mkdirSync(dirname(DB_PATH), { recursive: true });
 
 export const db: BetterSqliteDatabase = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
@@ -202,7 +201,9 @@ export function rowToEvent(r: any): IngestEvent {
 }
 
 export function listInstances(): InstanceConfig[] {
-  return db.prepare(`SELECT * FROM connector_instances`).all() as any[];
+  return db
+    .prepare(`SELECT id, connector_id as connectorId, label, enabled, config FROM connector_instances`)
+    .all() as InstanceConfig[];
 }
 
 export function upsertInstance(i: InstanceConfig) {

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef } from "react";
 import { applyFilter, useStore } from "@/lib/store";
+import { DroneTrackLayer } from "./DroneTrackLayer";
 import type { IngestEvent } from "@overwatch/schemas";
 
 export function Map3D() {
@@ -16,6 +17,9 @@ export function Map3D() {
   const flyTo = useStore((s) => s.flyTo);
   const setFlyTo = useStore((s) => s.requestFlyTo);
   const select = useStore((s) => s.selectEvent);
+  const followDroneId = useStore((s) => s.followDroneId);
+  const droneTracks = useStore((s) => s.droneTracks);
+  const setFollowDrone = useStore((s) => s.setFollowDrone);
 
   const visibleEvents = useMemo(
     () =>
@@ -102,6 +106,7 @@ export function Map3D() {
         /* ignore */
       }
       viewerRef.current = viewer;
+      (window as any).__cesiumViewer = viewer;
       viewer.scene.skyAtmosphere.show = true;
       viewer.scene.fog.enabled = true;
       viewer.scene.globe.enableLighting = true;
@@ -261,6 +266,28 @@ export function Map3D() {
     })();
   }, [followEntity, events]);
 
+  // Co-orbiting camera follow for drone tracks
+  useEffect(() => {
+    if (!followDroneId || !viewerRef.current) return;
+    const track = droneTracks.find((t) => t.id === followDroneId);
+    if (!track || track.state === "expired") { setFollowDrone(null); return; }
+    const geo = track.positionHistory.at(-1)?.geo ?? track.geo;
+    (async () => {
+      const Cesium = await import("cesium");
+      viewerRef.current.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(
+          geo.lon, geo.lat, (geo.alt ?? 0) + 800,
+        ),
+        orientation: {
+          heading: Cesium.Math.toRadians(track.headingDeg),
+          pitch: Cesium.Math.toRadians(-45),
+          roll: 0,
+        },
+        duration: track.state === "coasting" ? 3 : 0.5,
+      });
+    })();
+  }, [followDroneId, droneTracks, setFollowDrone]);
+
   // Fly-to requests
   useEffect(() => {
     if (!flyTo || !viewerRef.current) return;
@@ -278,7 +305,12 @@ export function Map3D() {
     })();
   }, [flyTo, setFlyTo]);
 
-  return <div ref={containerRef} className="absolute inset-0" data-agent="map-3d" />;
+  return (
+    <>
+      <div ref={containerRef} className="absolute inset-0" data-agent="map-3d" />
+      <DroneTrackLayer viewerRef={viewerRef} />
+    </>
+  );
 }
 
 function severityColor(Cesium: any, sev: string): any {

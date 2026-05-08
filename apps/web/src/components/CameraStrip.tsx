@@ -4,18 +4,30 @@ import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import type { CameraFeed } from "@overwatch/schemas";
 import { useStore } from "@/lib/store";
 import { CameraTile } from "./CameraTile";
-import { Plus, X, Video } from "lucide-react";
+import { Plus, X, Video, Cpu } from "lucide-react";
+import { onModelStatus } from "@/lib/visionEngine";
+
+// Detector presets — user can click these or type custom terms
+const DETECTOR_PRESETS = ["person", "vehicle", "fire", "motion", "crowd", "package", "weapon"];
 
 export function CameraStrip() {
   const cameras = useStore((s) => s.cameras);
   const setCameras = useStore((s) => s.setCameras);
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<Partial<CameraFeed>>({
-    kind: "rtsp",
+  const [draft, setDraft] = useState<Partial<CameraFeed> & { detectors: string[] }>({
+    kind: "hls",
     detectors: [],
   });
+  const [detectorInput, setDetectorInput] = useState("");
+  const [modelStatus, setModelStatus] = useState<string>("idle");
 
+  // Track LFM model status globally in the strip header
   useEffect(() => {
+    const unsub = onModelStatus((s) => setModelStatus(s));
+    return () => { unsub(); };
+  }, []);
+
+  function loadCameras() {
     apiGet<any[]>("/api/cameras")
       .then((cs) =>
         setCameras(
@@ -34,26 +46,43 @@ export function CameraStrip() {
           })),
         ),
       )
-      .catch(() => {
-        /* fabric not up yet */
-      });
-  }, [setCameras]);
+      .catch(() => undefined);
+  }
+
+  useEffect(() => {
+    loadCameras();
+    // Refresh on window focus so externally-added cameras appear
+    window.addEventListener("focus", loadCameras);
+    return () => window.removeEventListener("focus", loadCameras);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function addDetectorTag(val: string) {
+    const tag = val.trim().toLowerCase();
+    if (!tag) return;
+    if (!draft.detectors.includes(tag)) {
+      setDraft({ ...draft, detectors: [...draft.detectors, tag] });
+    }
+    setDetectorInput("");
+  }
+
+  function removeDetectorTag(tag: string) {
+    setDraft({ ...draft, detectors: draft.detectors.filter((d) => d !== tag) });
+  }
 
   async function addCamera() {
     if (!draft.label) return;
-    const isWebcam = draft.kind === "webcam";
-    if (!isWebcam && !draft.source) return;
+    if (draft.kind !== "webcam" && !draft.source) return;
     const id = `cam-${Date.now()}`;
     const cam: any = {
       id,
       label: draft.label,
       source: draft.source ?? "browser:webcam",
-      kind: draft.kind ?? "rtsp",
+      kind: draft.kind ?? "hls",
       lat: (draft as any).lat,
       lon: (draft as any).lon,
       whepUrl: draft.whepUrl,
       hlsUrl: draft.hlsUrl,
-      detectors: draft.detectors ?? [],
+      detectors: draft.detectors,
     };
     await apiPost("/api/cameras", cam);
     setCameras([
@@ -63,20 +92,42 @@ export function CameraStrip() {
         label: cam.label,
         source: cam.source,
         kind: cam.kind,
-        geo: (draft as any).lat != null ? { lat: (draft as any).lat, lon: (draft as any).lon } : undefined,
+        geo:
+          (draft as any).lat != null
+            ? { lat: (draft as any).lat, lon: (draft as any).lon }
+            : undefined,
         whepUrl: cam.whepUrl,
         hlsUrl: cam.hlsUrl,
         detectors: cam.detectors,
       },
     ]);
     setOpen(false);
-    setDraft({ kind: "rtsp", detectors: [] });
+    setDraft({ kind: "hls", detectors: [] });
+    setDetectorInput("");
   }
 
   async function removeCam(id: string) {
     await apiDelete(`/api/cameras/${id}`);
     setCameras(cameras.filter((c) => c.id !== id));
   }
+
+  const statusColor =
+    modelStatus === "ready"
+      ? "text-accent-400"
+      : modelStatus === "loading"
+      ? "text-yellow-400 animate-pulse"
+      : modelStatus === "error"
+      ? "text-red-400"
+      : "text-white/30";
+
+  const statusLabel =
+    modelStatus === "ready"
+      ? "LFM ready"
+      : modelStatus === "loading"
+      ? "LFM loading…"
+      : modelStatus === "error"
+      ? "LFM error"
+      : "";
 
   return (
     <div
@@ -93,6 +144,11 @@ export function CameraStrip() {
           <Plus className="h-3 w-3" /> Add Camera
         </button>
         <span className="text-white/30">{cameras.length} feeds</span>
+        {statusLabel && (
+          <span className={`flex items-center gap-0.5 text-[9px] ${statusColor}`}>
+            <Cpu className="h-2.5 w-2.5" /> {statusLabel}
+          </span>
+        )}
       </div>
       <div className="scrollable flex flex-1 gap-2 overflow-x-auto">
         {cameras.map((c) => (
@@ -102,7 +158,7 @@ export function CameraStrip() {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="panel w-[460px] p-4 text-sm">
+          <div className="panel w-[480px] p-4 text-sm">
             <div className="mb-3 flex items-center justify-between">
               <div className="font-semibold">New camera feed</div>
               <button onClick={() => setOpen(false)}>
@@ -123,11 +179,12 @@ export function CameraStrip() {
                   value={draft.kind}
                   onChange={(e) => setDraft({ ...draft, kind: e.target.value as any })}
                 >
-                  <option value="rtsp">RTSP (via go2rtc)</option>
-                  <option value="hls">HLS</option>
-                  <option value="mjpeg">MJPEG</option>
                   <option value="webcam">Webcam (browser)</option>
+                  <option value="hls">HLS</option>
+                  <option value="rtsp">RTSP (via go2rtc)</option>
+                  <option value="mjpeg">MJPEG</option>
                   <option value="youtube">YouTube embed</option>
+                  <option value="direct">Direct URL (mp4 / webm)</option>
                 </select>
               </Field>
               <Field label="Source URL" full>
@@ -136,7 +193,7 @@ export function CameraStrip() {
                   placeholder={
                     draft.kind === "webcam"
                       ? "(unused for webcam)"
-                      : "rtsp://… or https://…/stream.m3u8"
+                      : "https://…/stream.m3u8 or rtsp://…"
                   }
                   value={draft.source ?? ""}
                   onChange={(e) => setDraft({ ...draft, source: e.target.value })}
@@ -144,9 +201,8 @@ export function CameraStrip() {
                 />
                 {draft.kind === "rtsp" && (
                   <div className="mt-1 text-[10px] text-white/40">
-                    RTSP is proxied through go2rtc → WHEP. Make sure go2rtc is
-                    running on {process.env.NEXT_PUBLIC_GO2RTC_URL ?? "http://localhost:1984"}
-                    .
+                    RTSP is proxied through go2rtc → WHEP. go2rtc must be running on{" "}
+                    {process.env.NEXT_PUBLIC_GO2RTC_URL ?? "http://localhost:1984"}.
                   </div>
                 )}
               </Field>
@@ -182,28 +238,67 @@ export function CameraStrip() {
                   }
                 />
               </Field>
-              <Field label="Detectors" full>
-                <div className="flex flex-wrap gap-1">
-                  {(["motion", "person", "vehicle", "fire", "plate"] as const).map(
-                    (d) => (
-                      <label
+
+              {/* Open-vocab detector tags */}
+              <Field label="Detectors (what to watch for)" full>
+                <div className="mb-1 flex flex-wrap gap-1">
+                  {DETECTOR_PRESETS.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => addDetectorTag(d)}
+                      className={`rounded-full border px-2 py-0.5 text-[10px] uppercase transition ${
+                        draft.detectors.includes(d)
+                          ? "border-accent-400/60 bg-accent-400/10 text-accent-400"
+                          : "border-white/10 text-white/40 hover:border-white/20 hover:text-white/60"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-1">
+                  <input
+                    className="input flex-1"
+                    placeholder="type custom term and press Enter…"
+                    value={detectorInput}
+                    onChange={(e) => setDetectorInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        addDetectorTag(detectorInput);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="rounded bg-white/10 px-2 text-xs text-white/60 hover:bg-white/20"
+                    onClick={() => addDetectorTag(detectorInput)}
+                  >
+                    Add
+                  </button>
+                </div>
+                {draft.detectors.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {draft.detectors.map((d) => (
+                      <span
                         key={d}
-                        className="flex items-center gap-1 rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase"
+                        className="flex items-center gap-0.5 rounded-full bg-accent-400/10 px-2 py-0.5 text-[10px] text-accent-400"
                       >
-                        <input
-                          type="checkbox"
-                          checked={(draft.detectors ?? []).includes(d)}
-                          onChange={(e) => {
-                            const set = new Set(draft.detectors ?? []);
-                            if (e.target.checked) set.add(d);
-                            else set.delete(d);
-                            setDraft({ ...draft, detectors: [...set] });
-                          }}
-                        />
                         {d}
-                      </label>
-                    ),
-                  )}
+                        <button
+                          type="button"
+                          onClick={() => removeDetectorTag(d)}
+                          className="ml-0.5 opacity-60 hover:opacity-100"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-1 text-[10px] text-white/30">
+                  The LFM vision model will focus on these terms. Any natural language description works.
                 </div>
               </Field>
             </div>
@@ -241,9 +336,7 @@ function Field({
 }) {
   return (
     <label className={full ? "col-span-2" : ""}>
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-white/50">
-        {label}
-      </div>
+      <div className="mb-1 text-[10px] uppercase tracking-wider text-white/50">{label}</div>
       {children}
     </label>
   );

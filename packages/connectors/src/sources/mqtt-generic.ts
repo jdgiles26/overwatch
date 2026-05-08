@@ -8,7 +8,7 @@ const Cfg = z.object({
   username: z.string().default(""),
   password: z.string().default(""),
   category: z
-    .enum(["iot", "weather", "seismic", "air", "transport", "power", "water", "news", "cv", "space", "finance", "social", "fire", "lightning", "health", "other"])
+    .enum(["iot", "weather", "seismic", "air", "transport", "power", "water", "news", "cv", "drone", "space", "finance", "social", "fire", "lightning", "health", "other"])
     .default("iot"),
 });
 

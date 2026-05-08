@@ -8,14 +8,19 @@ import { CameraStrip } from "@/components/CameraStrip";
 import { AnalystPanel } from "@/components/AnalystPanel";
 import { OverseerPanel } from "@/components/OverseerPanel";
 import { EventDetail } from "@/components/EventDetail";
+import { DroneDetailPanel } from "@/components/DroneDetailPanel";
 import { TimeScrubber } from "@/components/TimeScrubber";
 import { CommandPalette } from "@/components/CommandPalette";
 import { useFabricSocket } from "@/lib/ws";
+import { useDroneWorker } from "@/lib/useDroneWorker";
+import { useTopicWorker } from "@/lib/useTopicWorker";
 import { useStore } from "@/lib/store";
 import { apiGet } from "@/lib/api";
 
 export default function HomePage() {
   useFabricSocket();
+  useDroneWorker();
+  useTopicWorker();
   const setLocations = useStore((s) => s.setLocations);
   const night = useStore((s) => s.nightVision);
 
@@ -46,6 +51,7 @@ export default function HomePage() {
           <div className="relative flex-1 tactical-grid">
             <MapView />
             <EventDetail />
+            <DroneDetailPanel />
             <TimeScrubber />
             <AnalystPanel />
             <OverseerPanel />

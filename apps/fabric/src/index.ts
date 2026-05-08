@@ -23,6 +23,7 @@ import {
 import { orchestrator } from "./orchestrator.js";
 import { computePIR, computeThreatcon } from "./threatcon.js";
 import { RuleEngine } from "./alerts.js";
+import { aggregator } from "./drone.js";
 import type { ServerToClient } from "@overwatch/schemas";
 import crypto from "node:crypto";
 
@@ -275,6 +276,9 @@ app.get("/ws", { websocket: true }, (socket) => {
   socket.send(
     JSON.stringify({ type: "snapshot", data: { events: recentEvents(200) } }),
   );
+  for (const track of aggregator.activeTracks()) {
+    socket.send(JSON.stringify({ type: "drone-track", data: track }));
+  }
   socket.send(JSON.stringify({ type: "status", data: orchestrator.allStatus() }));
   socket.send(JSON.stringify({ type: "rules", data: ruleEngine.list() }));
   socket.on("close", () => clients.delete(socket));
@@ -297,12 +301,14 @@ function broadcast(msg: ServerToClient) {
 const ruleEngine = new RuleEngine();
 orchestrator.on("event", (ev) => {
   broadcast({ type: "event", data: ev });
+  aggregator.process(ev);
   for (const firing of ruleEngine.evaluate(ev)) {
     broadcast({ type: "alert", data: firing });
   }
 });
 orchestrator.on("status", (st) => broadcast({ type: "status", data: st }));
 ruleEngine.on("rules", (rules) => broadcast({ type: "rules", data: rules }));
+aggregator.on("track", (track) => broadcast({ type: "drone-track", data: track }));
 
 let threatTimer: NodeJS.Timeout | null = null;
 function startThreatLoop() {
@@ -330,6 +336,7 @@ function safeParse(s: any) {
 }
 
 await orchestrator.start();
+aggregator.start();
 startThreatLoop();
 
 app
@@ -339,6 +346,7 @@ app
 process.on("SIGINT", () => {
   if (threatTimer) clearInterval(threatTimer);
   orchestrator.stop();
+  aggregator.stop();
   db.close();
   app.close().then(() => process.exit(0));
 });

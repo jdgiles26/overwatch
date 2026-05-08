@@ -5,6 +5,8 @@ import type {
   AlertRule,
   CameraFeed,
   ConnectorStatus,
+  DroneClassification,
+  DroneTrack,
   IngestEvent,
   Location,
   PIR,
@@ -40,6 +42,12 @@ export type Store = {
   timeWindow: { from: number; to: number } | null; // null = live
   // entity follow
   followEntity: { kind: "icao24" | "id"; value: string } | null;
+  // drone tracks
+  droneTracks: DroneTrack[];
+  droneClassifications: Record<string, DroneClassification>;
+  followDroneId: string | null;
+  // NLI-derived topic tags keyed by event id
+  eventTopics: Record<string, string[]>;
 
   setView: (v: View) => void;
   setNightVision: (v: boolean) => void;
@@ -63,6 +71,10 @@ export type Store = {
   pushFiring: (f: AlertFiring) => void;
   setTimeWindow: (w: { from: number; to: number } | null) => void;
   setFollowEntity: (e: { kind: "icao24" | "id"; value: string } | null) => void;
+  pushDroneTrack: (t: DroneTrack) => void;
+  setDroneClassification: (id: string, c: DroneClassification) => void;
+  setFollowDrone: (id: string | null) => void;
+  setEventTopics: (id: string, topics: string[]) => void;
 };
 
 export const useStore = create<Store>((set, get) => ({
@@ -84,6 +96,10 @@ export const useStore = create<Store>((set, get) => ({
   firings: [],
   timeWindow: null,
   followEntity: null,
+  droneTracks: [],
+  droneClassifications: {},
+  followDroneId: null,
+  eventTopics: {},
 
   setView: (v) => set({ view: v }),
   setNightVision: (v) => set({ nightVision: v }),
@@ -128,6 +144,29 @@ export const useStore = create<Store>((set, get) => ({
   pushFiring: (f) => set({ firings: [f, ...get().firings].slice(0, 200) }),
   setTimeWindow: (w) => set({ timeWindow: w }),
   setFollowEntity: (e) => set({ followEntity: e }),
+  pushDroneTrack: (t) => {
+    const existing = get().droneTracks;
+    const idx = existing.findIndex((x) => x.id === t.id);
+    let next: DroneTrack[];
+    if (idx >= 0) {
+      next = [...existing];
+      next[idx] = t;
+    } else {
+      next = [t, ...existing];
+    }
+    // remove expired tracks and cap at 100
+    next = next.filter((x) => x.state !== "expired").slice(0, 100);
+    const followDroneId = get().followDroneId;
+    set({
+      droneTracks: next,
+      followDroneId: followDroneId && !next.find((x) => x.id === followDroneId) ? null : followDroneId,
+    });
+  },
+  setDroneClassification: (id, c) =>
+    set({ droneClassifications: { ...get().droneClassifications, [id]: c } }),
+  setFollowDrone: (id) => set({ followDroneId: id }),
+  setEventTopics: (id, topics) =>
+    set({ eventTopics: { ...get().eventTopics, [id]: topics } }),
 }));
 
 export function applyFilter(

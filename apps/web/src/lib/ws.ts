@@ -12,6 +12,9 @@ export function useFabricSocket() {
   const setWsConnected = useStore((s) => s.setWsConnected);
   const setRules = useStore((s) => s.setRules);
   const pushFiring = useStore((s) => s.pushFiring);
+  const pushDroneTrack = useStore((s) => s.pushDroneTrack);
+  const setDroneClassification = useStore((s) => s.setDroneClassification);
+  const setFollowDrone = useStore((s) => s.setFollowDrone);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -36,6 +39,15 @@ export function useFabricSocket() {
           else if (msg.type === "threatcon") setThreatCon(msg.data);
           else if (msg.type === "pir") setPIR(msg.data);
           else if (msg.type === "rules") setRules(msg.data);
+          else if (msg.type === "drone-track") {
+            pushDroneTrack(msg.data);
+            if (!useStore.getState().followDroneId && msg.data.severity === "extreme") {
+              setFollowDrone(msg.data.id);
+            }
+          }
+          else if (msg.type === "drone-classification") {
+            setDroneClassification(msg.data.trackId, msg.data);
+          }
           else if (msg.type === "alert") {
             const f = msg.data;
             pushFiring(f);
@@ -87,5 +99,8 @@ export function useFabricSocket() {
     setWsConnected,
     setRules,
     pushFiring,
+    pushDroneTrack,
+    setDroneClassification,
+    setFollowDrone,
   ]);
 }

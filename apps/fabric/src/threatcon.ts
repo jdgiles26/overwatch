@@ -1,14 +1,16 @@
 import type { IngestEvent, Location, PIR, ThreatCon } from "@overwatch/schemas";
 import { km } from "@overwatch/connectors";
 
+const sevRank = (s: string): number =>
+  (({ info: 0, low: 1, moderate: 2, high: 3, extreme: 4 } as Record<string, number>)[s] ?? 0);
+
 export function computeThreatcon(events: IngestEvent[], locations: Location[]): ThreatCon {
   let score = 0;
   const reasons: string[] = [];
   const cutoff = Date.now() - 6 * 60 * 60 * 1000;
   const recent = events.filter((e) => new Date(e.receivedAt).getTime() > cutoff);
 
-  const sev = (s: string): number =>
-    (({ info: 0, low: 1, moderate: 2, high: 3, extreme: 4 } as Record<string, number>)[s] ?? 0);
+  const sev = sevRank;
 
   for (const loc of locations) {
     for (const e of recent) {
@@ -28,6 +30,18 @@ export function computeThreatcon(events: IngestEvent[], locations: Location[]): 
   for (const e of recent) {
     if (e.severity === "extreme") score += 1;
     else if (e.severity === "high") score += 0.3;
+  }
+
+  // Drone-specific boost (additive on top of global; targets: extreme→+2.0 total, high→+1.0 total)
+  for (const e of recent) {
+    if (e.category !== "drone") continue;
+    if (e.severity === "extreme") {
+      score += 1.0;
+      if (reasons.length < 8) reasons.push(`Extreme drone threat: ${e.title}`);
+    } else if (e.severity === "high") {
+      score += 0.7;
+      if (reasons.length < 8) reasons.push(`High drone threat: ${e.title}`);
+    }
   }
 
   score = Math.min(10, score);
@@ -54,7 +68,7 @@ export function computePIR(events: IngestEvent[], locations: Location[]): PIR[] 
     !!e.geo && locations.some((l) => km(l.geo, e.geo!) <= radius);
 
   const yn = (b: boolean): "yes" | "no" => (b ? "yes" : "no");
-  const mk = (id: string, question: string, answer: "yes" | "no", detail?: string): PIR => ({
+  const mk = (id: string, question: string, answer: "yes" | "no" | "unknown", detail?: string): PIR => ({
     id,
     question,
     answer,
@@ -109,5 +123,21 @@ export function computePIR(events: IngestEvent[], locations: Location[]): PIR[] 
       "Computer-vision detector fired in the last hour?",
       yn(has((e) => e.category === "cv", recent1)),
     ),
+    (() => {
+      const cutoff15 = Date.now() - 15 * 60 * 1000;
+      const cutoff60 = Date.now() - 60 * 60 * 1000;
+      const droneHigh15 = events.filter(
+        (e) => e.category === "drone" && sevRank(e.severity) >= 3 && new Date(e.receivedAt).getTime() > cutoff15,
+      );
+      const droneAny60 = events.filter(
+        (e) => e.category === "drone" && new Date(e.receivedAt).getTime() > cutoff60,
+      );
+      return mk(
+        "drone-alert",
+        "Is hostile drone activity detected in the AO?",
+        droneHigh15.length > 0 ? "yes" : droneAny60.length > 0 ? "unknown" : "no",
+        droneHigh15[0] ? `Last: ${droneHigh15[0].title}` : undefined,
+      );
+    })(),
   ];
 }
