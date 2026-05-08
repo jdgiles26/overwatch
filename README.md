@@ -31,6 +31,54 @@ docker compose -f infra/docker-compose.yml up --build
 pnpm seed
 ```
 
+## First-run: encryption key and SQLite DB
+
+On the first start of the fabric backend, two files are created automatically inside
+`apps/fabric/data/` (the directory is created if it doesn't exist):
+
+| File | What it is | Created by |
+|---|---|---|
+| `overwatch.db` (+ `-shm`, `-wal`) | SQLite database (events, connectors, cameras, rules, …) | `better-sqlite3` on first connection |
+| `key.bin` | 32-byte AES-256-GCM key used to encrypt connector configs at rest, mode `0o600` | `getOrMakeKey()` in `apps/fabric/src/db.ts` |
+
+**These files are intentionally not tracked in git** (see `.gitignore`). Each clone of the
+repo generates its own key and its own database — there are no shared secrets in the repo.
+
+You can override the locations with environment variables:
+
+```bash
+OVERWATCH_DB=/var/lib/overwatch/overwatch.db
+OVERWATCH_KEY_PATH=/var/lib/overwatch/key.bin
+```
+
+### Backing up
+
+`overwatch.db` and `key.bin` belong together — back them up as a pair. Losing the key
+makes every encrypted connector config (API keys, etc.) unreadable. The `infra/docker-compose.yml`
+already persists both onto a single named volume.
+
+### Rotating the encryption key
+
+Connector configs are encrypted with `key.bin`, so rotating the key invalidates any
+configs already stored in `overwatch.db`. Two paths:
+
+**Easy (wipes the DB along with the key — fastest, loses local state):**
+
+```bash
+# Stop fabric first
+rm apps/fabric/data/key.bin
+rm apps/fabric/data/overwatch.db apps/fabric/data/overwatch.db-shm apps/fabric/data/overwatch.db-wal
+# Restart fabric — a fresh key and DB are generated automatically
+pnpm --filter @overwatch/fabric dev
+# Repopulate demo data
+pnpm seed
+```
+
+**Preserve state (keeps connectors and history):** write a one-off migration that reads
+each row in `connector_instances`, decrypts `config` with the old key, and re-encrypts
+with a new key — then swap `key.bin`. There is no built-in script for this; do it manually
+if/when you have production state worth preserving.
+
 ## What's inside
 
 ```
