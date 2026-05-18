@@ -2,9 +2,15 @@
 
 Real-time situational-awareness platform with a data-fabric ingestion fabric, RTSP/OpenCV
 camera feeds, a 3D globe map, and on-device WebGPU AI (analyst chat + autonomous Overseer
-agent that can drive the app).
-
-> Inspired by `overglass.io` — extended with: pluggable connectors, generic IoT/MQTT/Webhook/RSS
+agent that can drive the app). Inspired by my time with the great peeps at Talon. In browser
+inference for real time keyword data query,ingestion of OSINT, Goverment Data, Open source
+public data feeds, RSS Feeds, Drone feed, connectors are Ready for what you throw at them aT 
+your will, if by chance a connector is not fitting snug And..well not connecting, contact me,
+or check out the Test Driven Development Agentic Workflow implemented, feed that to any agent
+As you wish it will get you right!  ... .. . 0_o 
+                                                   . . .hope you Enjoy dont be stranger . . .
+ 
+> Extended with: pluggable connectors, generic IoT/MQTT/Webhook/RSS
 > ingest, 3D globe (Cesium) + 2D MapLibre, browser-side computer-vision detection, and an
 > autonomous browser agent powered by `@huggingface/transformers` on WebGPU.
 
