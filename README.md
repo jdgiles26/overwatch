@@ -1,14 +1,14 @@
 # OverWatch
 
-Real-time situational-awareness platform with a data-fabric ingestion fabric, RTSP/OpenCV
+Real-time situational-awareness platform with a data-fabric ingestion layer, RTSP/OpenCV
 camera feeds, a 3D globe map, and on-device WebGPU AI (analyst chat + autonomous Overseer
-agent that can drive the app). Inspired by my time with the great peeps at Talon. In browser
-inference for real time keyword data query,ingestion of OSINT, Goverment Data, Open source
-public data feeds, RSS Feeds, Drone feed, connectors are Ready for what you throw at them aT 
-your will, if by chance a connector is not fitting snug And..well not connecting, contact me,
-or check out the Test Driven Development Agentic Workflow implemented, feed that to any agent
-As you wish it will get you right!  ... .. . 0_o 
-                                                   . . .hope you Enjoy dont be stranger . . .
+agent that can drive the app). Inspired by my time with the great peeps at Talon. In-browser
+inference for real-time keyword data query, ingestion of OSINT, Government data, open-source
+public data feeds, RSS feeds, drone feeds — connectors are ready for whatever you throw at
+them at your will. If a connector isn't fitting snug and... well, not connecting, contact me,
+or check out the Test-Driven Development agentic workflow implemented; feed that to any agent
+as you wish, it'll get you right!  ... .. . 0_o
+                                                   . . . hope you enjoy, don't be a stranger . . .
  
 > Extended with: pluggable connectors, generic IoT/MQTT/Webhook/RSS
 > ingest, 3D globe (Cesium) + 2D MapLibre, browser-side computer-vision detection, and an
