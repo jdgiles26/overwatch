@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
 let lastFrame: ImageData | null = null;
-let lastDetectAt: Record<string, number> = {};
+const lastDetectAt: Record<string, number> = {};
 const COOLDOWN_MS = 6_000;
 
 self.onmessage = (ev: MessageEvent) => {

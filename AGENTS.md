@@ -16,7 +16,7 @@ The codebase is a **pnpm monorepo** with two applications and six packages. Only
 
 | Layer | Technology | Version / Notes |
 |---|---|---|
-| Package manager | pnpm | `10.33.2` (enforced via `packageManager` field) |
+| Package manager | pnpm | `11.2.2` (enforced via `packageManager` field). Native build scripts opt-in via `pnpm-workspace.yaml` `allowBuilds:` (pnpm ≥11) and `onlyBuiltDependencies:` (pnpm 10.x), plus project `.npmrc` `ignore-scripts=false`. |
 | Runtime | Node.js | `>=20` |
 | Language | TypeScript | `5.9.2`, strict mode, `noUncheckedIndexedAccess` enabled |
 | Frontend framework | Next.js | `15.1.3`, App Router, React `19.0.0` |

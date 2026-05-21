@@ -1,3 +1,22 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Allow native build scripts for trusted packages.
+# pnpm >=11 reads `allowBuilds`; pnpm 10.x reads `onlyBuiltDependencies`.
+# Keep both in sync so the lockfile/install behaves the same on either.
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - esbuild
+  - onnxruntime-node
+  - protobufjs
+  - sharp
+  - unrs-resolver
