@@ -50,8 +50,7 @@ export async function startRecording(
       const pipe = await getOrCreatePipeline(
         "automatic-speech-recognition",
         "Xenova/whisper-tiny.en",
-        "wasm",
-        "q8",
+        "fp16",
         () => undefined,
       );
       const out = await pipe(audio, {
@@ -75,17 +74,21 @@ async function blobToFloat32(blob: Blob): Promise<Float32Array> {
   const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({
     sampleRate: 16000,
   });
-  const decoded = await ctx.decodeAudioData(ab.slice(0));
-  // mono mix
-  const data = decoded.getChannelData(0);
-  // Resample if necessary (decodeAudioData honored sampleRate option in most browsers)
-  if (decoded.sampleRate === 16000) return new Float32Array(data);
-  const ratio = decoded.sampleRate / 16000;
-  const out = new Float32Array(Math.floor(data.length / ratio));
-  for (let i = 0; i < out.length; i++) {
-    out[i] = data[Math.floor(i * ratio)] ?? 0;
+  try {
+    const decoded = await ctx.decodeAudioData(ab.slice(0));
+    // mono mix
+    const data = decoded.getChannelData(0);
+    // Resample if necessary (decodeAudioData honored sampleRate option in most browsers)
+    if (decoded.sampleRate === 16000) return new Float32Array(data);
+    const ratio = decoded.sampleRate / 16000;
+    const out = new Float32Array(Math.floor(data.length / ratio));
+    for (let i = 0; i < out.length; i++) {
+      out[i] = data[Math.floor(i * ratio)] ?? 0;
+    }
+    return out;
+  } finally {
+    ctx.close();
   }
-  return out;
 }
 
 let _ttsCancel: (() => void) | null = null;

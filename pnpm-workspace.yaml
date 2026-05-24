@@ -7,6 +7,7 @@ packages:
 # Keep both in sync so the lockfile/install behaves the same on either.
 allowBuilds:
   better-sqlite3: true
+  core-js: false
   esbuild: true
   onnxruntime-node: true
   protobufjs: true

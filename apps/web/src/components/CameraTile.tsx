@@ -6,6 +6,8 @@ import { submitFrame, onDetection, onModelStatus } from "@/lib/visionEngine";
 import { submitDroneFrame, onDroneDetection, onDroneDetectorStatus } from "@/lib/droneDetectorWorkerEngine";
 import { useStore } from "@/lib/store";
 import { detectionModesForCamera } from "@/lib/detectionConfig";
+import { captureFrameRGBA, isOffscreenCanvasSupported } from "@/lib/frameCapture";
+import { BoundingBoxOverlay } from "@/components/BoundingBoxOverlay";
 
 
 function youtubeEmbedUrl(src: string): string {
@@ -28,7 +30,7 @@ export function CameraTile({
   const setCameras = useStore((s) => s.setCameras);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   const streamRef = useRef<MediaStream | null>(null);
   const hlsRef = useRef<any>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -143,6 +145,7 @@ export function CameraTile({
   // ── AI detection via shared vision + YOLO workers ──────────────────────────
   const globalDetectionMode = useStore((s) => s.globalDetectionMode);
   const setYoloDetections = useStore((s) => s.setYoloDetections);
+  const pushError = useStore((s) => s.pushError);
   const activeDetectionMode = camera.detectionMode ?? globalDetectionMode;
   const activeModes = detectionModesForCamera(activeDetectionMode);
   const hasDetectors = !!camera.detectors && camera.detectors.length > 0;
@@ -209,41 +212,36 @@ export function CameraTile({
   }, [camera, hasYolo, setYoloDetections]);
 
   // ── Frame extraction loop ────────────────────────────────────────────────
+  // Captures off-DOM via OffscreenCanvas. OffscreenCanvas is required (no DOM
+  // fallback); it is universally available in WebGPU-capable browsers.
+  // Sampled at ≤ 1 FPS for the detector and 0.5 FPS for the VLM to keep the
+  // main thread free for 60 fps UI rendering.
   useEffect(() => {
     if (!hasVlm && !hasYolo) return;
     const v = videoRef.current;
-    const c = canvasRef.current;
-    if (!v || !c) return;
+    if (!v) return;
+    if (!isOffscreenCanvasSupported()) {
+      pushError({
+        key: "offscreen-canvas",
+        title: "OffscreenCanvas fallback",
+        message:
+          "OffscreenCanvas unavailable — using DOM canvas for frame capture. This may reduce UI performance on busy cameras.",
+      });
+    }
 
-    const ctx = c.getContext("2d");
     let timer = 0;
     const tick = () => {
-      if (v.readyState >= 2 && ctx) {
-        c.width = 320;
-        c.height = 180;
-        ctx.drawImage(v, 0, 0, 320, 180);
-        const imgData = ctx.getImageData(0, 0, 320, 180);
-        const source = imgData.data.buffer;
-
-        // Each worker receives an INDEPENDENT ArrayBuffer because postMessage
-        // transfers (detaches) the buffer. Sharing a single buffer between
-        // both submitFrame and submitDroneFrame would throw DataCloneError
-        // on the second transfer.
-        if (hasVlm) {
-          const vlmBuf = source.slice(0);
-          submitFrame(camera.id, vlmBuf, 320, 180, camera.detectors);
-        }
-        if (hasYolo) {
-          const yoloBuf = source.slice(0);
-          submitDroneFrame(camera.id, yoloBuf, 320, 180, camera.geo);
-        }
+      const captured = captureFrameRGBA(v, 320, 180);
+      if (captured) {
+        if (hasVlm) submitFrame(camera.id, captured.buffer.slice(0), 320, 180, camera.detectors);
+        if (hasYolo) submitDroneFrame(camera.id, captured.buffer.slice(0), 320, 180, camera.geo);
       }
-      const interval = hasYolo ? 1000 : 2000; // YOLO is faster, sample more often
+      const interval = hasYolo ? 1000 : 2000;
       timer = window.setTimeout(tick, interval);
     };
     timer = window.setTimeout(tick, 4000);
     return () => clearTimeout(timer);
-  }, [camera, hasVlm, hasYolo]);
+  }, [camera, hasVlm, hasYolo, pushError]);
 
   // ── Drag-to-reorder (within the strip, no CameraStrip changes needed) ────
   function handleDragStart(e: React.DragEvent) {
@@ -309,7 +307,9 @@ export function CameraTile({
             autoPlay
           />
         )}
-        <canvas ref={canvasRef} className="hidden" />
+
+
+        {hasYolo && <BoundingBoxOverlay cameraId={camera.id} />}
 
         {/* Top bar — identical to original, plus grip icon */}
         <div className="absolute inset-x-1 top-1 flex items-center gap-1 text-[10px]">

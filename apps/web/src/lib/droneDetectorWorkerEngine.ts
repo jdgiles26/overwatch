@@ -1,10 +1,34 @@
-// Singleton engine for the YOLO drone detector Web Worker.
-// Mirrors the pattern in visionEngine.ts — one shared worker for all camera tiles.
+// Shared DETR drone-detector worker for all camera tiles — 3-tier fallback chain.
+// When falling back from the preferred tier, a persistent error is pushed to the
+// UI so the user knows performance will be degraded.
+import { useStore } from "./store";
 
 let _worker: Worker | null = null;
 let _status = "idle";
 const _detectionHandlers = new Map<string, (msg: any) => void>();
 const _statusHandlers = new Set<(s: string) => void>();
+
+const ERROR_KEY = "drone-detector-model";
+
+function clearDetectorError() {
+  try {
+    useStore.getState().dismissError(ERROR_KEY);
+  } catch {
+    /* SSR */
+  }
+}
+
+function reportDetectorError(message: string) {
+  try {
+    useStore.getState().pushError({
+      key: ERROR_KEY,
+      title: "Drone object detector degraded",
+      message,
+    });
+  } catch {
+    /* SSR */
+  }
+}
 
 function w(): Worker {
   if (_worker) return _worker;
@@ -16,22 +40,36 @@ function w(): Worker {
     const msg = ev.data;
     if (msg.type === "status") {
       _status = msg.status;
-      if (msg.device) console.info(`[droneDetector] device: ${msg.device}`);
-      if (msg.error) console.error(`[droneDetector] load error: ${msg.error}`);
+      if (msg.status === "ready" && msg.device) {
+        console.info(`[droneDetector] device: ${msg.device}`);
+        try {
+          useStore.getState().setYoloBackend(msg.device);
+        } catch {
+          /* SSR */
+        }
+        if (msg.device === "webgpu") clearDetectorError();
+      }
+      if (msg.status === "fallback" && msg.message) {
+        console.warn(`[droneDetector] fallback: ${msg.message}`);
+        reportDetectorError(msg.message);
+      }
+      if (msg.status === "error") {
+        const err = String(msg.error ?? "Unknown drone-detector load error");
+        console.error(`[droneDetector] load error: ${err}`);
+        reportDetectorError(err);
+      }
       _statusHandlers.forEach((h) => h(_status));
     } else if (msg.type === "detection" && msg.cameraId) {
       _detectionHandlers.get(msg.cameraId)?.(msg);
     } else if (msg.type === "inference-error") {
-      console.warn(
-        `[droneDetector] inference error (${msg.cameraId}): ${msg.error}`,
-      );
+      console.warn(`[droneDetector] inference error (${msg.cameraId}): ${msg.error}`);
     }
   };
   _worker.onerror = (ev) => {
-    console.error(
-      `[droneDetector] worker error: ${ev.message ?? "unknown"} @ ${ev.filename ?? "?"}:${ev.lineno ?? "?"}`,
-    );
+    const message = `Drone-detector worker crashed: ${ev.message ?? "unknown"} @ ${ev.filename ?? "?"}:${ev.lineno ?? "?"}`;
+    console.error(`[droneDetector] ${message}`);
     _status = "error";
+    reportDetectorError(message);
     _statusHandlers.forEach((h) => h(_status));
   };
   _worker.postMessage({ type: "load" });
@@ -52,10 +90,7 @@ export function submitDroneFrame(
   );
 }
 
-export function onDroneDetection(
-  cameraId: string,
-  handler: (msg: any) => void,
-) {
+export function onDroneDetection(cameraId: string, handler: (msg: any) => void) {
   w();
   _detectionHandlers.set(cameraId, handler);
   return () => _detectionHandlers.delete(cameraId);

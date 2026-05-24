@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ConsoleFilter } from "@/components/ConsoleFilter";
 import { PwaRegister } from "@/components/PwaRegister";
+import { ToastContainer } from "@/components/ToastContainer";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 export const metadata: Metadata = {
   title: "OverWatch — Real-Time Situational Awareness",
@@ -22,6 +24,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ConsoleFilter />
         <PwaRegister />
         {children}
+        <ErrorBanner />
+        <ToastContainer />
       </body>
     </html>
   );

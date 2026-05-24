@@ -1,5 +1,7 @@
 "use client";
 
+import { useStore } from "./store";
+
 type Message = { role: "system" | "user" | "assistant"; content: string };
 
 let _transformers: any | null = null;
@@ -88,7 +90,7 @@ export async function detectDevice(): Promise<"webgpu" | "wasm"> {
       const adapter = await (navigator as any).gpu.requestAdapter();
       if (adapter) return "webgpu";
     } catch {
-      /* ignore */
+      /* fall through to wasm */
     }
   }
   return "wasm";
@@ -114,53 +116,104 @@ export interface RunChatHandle {
 const _pipelineCache = new Map<string, any>();
 const _pipelineLoading = new Map<string, Promise<any>>();
 
+function pushFallbackError(message: string) {
+  try {
+    const { pushError } = useStore.getState();
+    pushError({ key: "ai-pipeline", title: "AI pipeline degraded", message });
+  } catch {
+    /* SSR */
+  }
+}
+
+function clearFallbackError() {
+  try {
+    const { dismissError } = useStore.getState();
+    dismissError("ai-pipeline");
+  } catch {
+    /* SSR */
+  }
+}
+
 export async function getOrCreatePipeline(
   task: string,
   model: string,
-  device: "webgpu" | "wasm",
   dtype: string,
   onProgress?: (msg: string) => void,
 ): Promise<any> {
   const { pipeline } = await getTransformers();
+  const device = await detectDevice();
+
   const cacheKey = `${task}:${model}:${device}:${dtype}`;
   const cached = _pipelineCache.get(cacheKey);
   if (cached) return cached;
   const loading = _pipelineLoading.get(cacheKey);
   if (loading) return loading;
+
   const promise = (async () => {
-    onProgress?.(`Loading ${model} on ${device}…`);
     try {
-      const p = await pipeline(task, model, {
-        device,
-        dtype,
-        session_options: SESSION_OPTIONS,
-        progress_callback: (cb: any) => {
-          if (cb?.status === "progress" && cb?.progress != null) {
-            onProgress?.(`Loading ${cb.file ?? model}: ${Math.round(cb.progress)}%`);
-          } else if (cb?.status === "ready") {
-            onProgress?.("Model ready");
-          } else if (cb?.status === "download") {
-            onProgress?.(`Downloading ${cb.file ?? model}`);
-          } else if (cb?.status === "initiate") {
-            onProgress?.(`Fetching ${cb.file ?? model}`);
-          }
-        },
-      });
-      _pipelineCache.set(cacheKey, p);
-      return p;
-    } catch (e) {
-      // Don't poison the cache; allow fallback path to proceed.
+      // --- Try WebGPU first ---
       if (device === "webgpu") {
-        onProgress?.("WebGPU init failed; falling back to WASM…");
-        return getOrCreatePipeline(task, model, "wasm", "q4", onProgress);
+        onProgress?.(`Loading ${model} on WebGPU…`);
+        try {
+          const p = await pipeline(task, model, {
+            device: "webgpu",
+            dtype,
+            session_options: SESSION_OPTIONS,
+            progress_callback: makeProgressCallback(onProgress, model),
+          });
+          _pipelineCache.set(cacheKey, p);
+          clearFallbackError();
+          return p;
+        } catch (err) {
+          console.warn(`[ai] WebGPU pipeline failed, falling back to WASM: ${err}`);
+          pushFallbackError(
+            `WebGPU unavailable for ${model} — falling back to WASM. Inference will be slower.`,
+          );
+        }
+      } else {
+        pushFallbackError(
+          `WebGPU not detected for ${model} — using WASM. Inference will be slower.`,
+        );
       }
-      throw e;
+
+      // --- WASM fallback ---
+      const wasmKey = `${task}:${model}:wasm:q8`;
+      const wasmCached = _pipelineCache.get(wasmKey);
+      if (wasmCached) return wasmCached;
+
+      onProgress?.(`Loading ${model} on WASM (fallback)…`);
+      const p = await pipeline(task, model, {
+        device: "wasm",
+        dtype: "q8",
+        session_options: SESSION_OPTIONS,
+        progress_callback: makeProgressCallback(onProgress, model),
+      });
+      _pipelineCache.set(wasmKey, p);
+      return p;
     } finally {
       _pipelineLoading.delete(cacheKey);
     }
   })();
+
   _pipelineLoading.set(cacheKey, promise);
   return promise;
+}
+
+function makeProgressCallback(
+  onProgress: ((msg: string) => void) | undefined,
+  model: string,
+) {
+  return (cb: any) => {
+    if (cb?.status === "progress" && cb?.progress != null) {
+      onProgress?.(`Loading ${cb.file ?? model}: ${Math.round(cb.progress)}%`);
+    } else if (cb?.status === "ready") {
+      onProgress?.("Model ready");
+    } else if (cb?.status === "download") {
+      onProgress?.(`Downloading ${cb.file ?? model}`);
+    } else if (cb?.status === "initiate") {
+      onProgress?.(`Fetching ${cb.file ?? model}`);
+    }
+  };
 }
 
 /**
@@ -190,14 +243,13 @@ export function detectRepetitionLoop(text: string): boolean {
 }
 
 export async function runChat(args: RunChatArgs): Promise<RunChatHandle> {
-  const { TextStreamer, InterruptableStoppingCriteria } = await getTransformers();
   const device = await detectDevice();
   args.onDevice?.(device);
+  const { TextStreamer, InterruptableStoppingCriteria } = await getTransformers();
   const generator = await getOrCreatePipeline(
     "text-generation",
     args.model,
-    device,
-    device === "webgpu" ? "q4f16" : "q4",
+    "q4f16",
     args.onProgress,
   );
 
@@ -273,13 +325,12 @@ export async function runVisionCaption(args: {
   blob: Blob;
   onProgress?: (msg: string) => void;
 }): Promise<string> {
+  await detectDevice();
   const { RawImage } = await getTransformers();
-  const device = await detectDevice();
   const captioner = await getOrCreatePipeline(
     "image-to-text",
     "Xenova/vit-gpt2-image-captioning",
-    device,
-    device === "webgpu" ? "fp16" : "q8",
+    "fp16",
     args.onProgress,
   );
   const url = URL.createObjectURL(args.blob);

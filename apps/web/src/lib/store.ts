@@ -15,8 +15,16 @@ import type {
 } from "@overwatch/schemas";
 
 import { DetectionMode } from "./detectionConfig";
+import {
+  createToast,
+  removeToastById,
+  pruneExpiredToasts,
+  type Toast,
+  type CreateToastInput,
+} from "./toasts";
+import { upsertError, removeErrorByKey, type AppError } from "./errors";
 
-export type { DetectionMode };
+export type { DetectionMode, Toast, AppError };
 
 export type FilterState = {
   categories: Set<string>;
@@ -58,6 +66,13 @@ export type Store = {
   yoloDetections: Record<string, CvDetection[]>;
   yoloModelStatus: string;
   vlmModelStatus: string;
+  yoloBackend: string | null;
+  vlmBackend: string | null;
+  // Transient UI toasts (info/success notifications).
+  toasts: Toast[];
+  // Persistent errors (rendered in <ErrorBanner>); cleared only when the
+  // underlying condition is resolved or dismissed by the user.
+  errors: AppError[];
 
   setView: (v: View) => void;
   setNightVision: (v: boolean) => void;
@@ -89,6 +104,14 @@ export type Store = {
   setYoloDetections: (cameraId: string, detections: CvDetection[]) => void;
   setYoloModelStatus: (s: string) => void;
   setVlmModelStatus: (s: string) => void;
+  setYoloBackend: (b: string | null) => void;
+  setVlmBackend: (b: string | null) => void;
+  pushToast: (input: CreateToastInput) => void;
+  dismissToast: (id: string) => void;
+  pruneToasts: () => void;
+  pushError: (err: AppError) => void;
+  dismissError: (key: string) => void;
+  clearErrors: () => void;
 };
 
 export const useStore = create<Store>((set, get) => ({
@@ -118,6 +141,10 @@ export const useStore = create<Store>((set, get) => ({
   yoloDetections: {},
   yoloModelStatus: "idle",
   vlmModelStatus: "idle",
+  yoloBackend: null,
+  vlmBackend: null,
+  toasts: [],
+  errors: [],
 
   setView: (v) => set({ view: v }),
   setNightVision: (v) => set({ nightVision: v }),
@@ -190,6 +217,26 @@ export const useStore = create<Store>((set, get) => ({
     set({ yoloDetections: { ...get().yoloDetections, [cameraId]: detections } }),
   setYoloModelStatus: (s) => set({ yoloModelStatus: s }),
   setVlmModelStatus: (s) => set({ vlmModelStatus: s }),
+  setYoloBackend: (b) => set({ yoloBackend: b }),
+  setVlmBackend: (b) => set({ vlmBackend: b }),
+  pushToast: (input) => {
+    const t = createToast(input, Date.now());
+    set({ toasts: [...get().toasts, t] });
+  },
+  dismissToast: (id) => set({ toasts: removeToastById(get().toasts, id) }),
+  pruneToasts: () => {
+    const next = pruneExpiredToasts(get().toasts, Date.now());
+    if (next !== get().toasts) set({ toasts: next });
+  },
+  pushError: (err) => {
+    const next = upsertError(get().errors, err);
+    if (next !== get().errors) set({ errors: next });
+  },
+  dismissError: (key) => {
+    const next = removeErrorByKey(get().errors, key);
+    if (next !== get().errors) set({ errors: next });
+  },
+  clearErrors: () => set({ errors: [] }),
 }));
 
 export function applyFilter(
