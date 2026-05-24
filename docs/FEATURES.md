@@ -31,6 +31,7 @@ flag, or (b) needs to be added to this document before merging.
 | Intel feed | `apps/web/src/components/IntelFeed.tsx` | `event-<id>` | Manual |
 | Event detail drawer | `apps/web/src/components/EventDetail.tsx` | `event-detail` | Manual |
 | Threat/PIR assessment panel | `apps/web/src/components/AssessmentPanel.tsx` | `assessment` | `apps/fabric/src/threatcon.test.ts` |
+| Per-PIR click-to-expand + "Show on map" CTA | `apps/web/src/components/AssessmentPanel.tsx`, `apps/web/src/lib/pirDetail.ts` | `pir-<id>`, `pir-<id>-toggle`, `pir-<id>-show-on-map`, `pir-<id>-evidence-<eventId>` | `apps/web/src/lib/pirDetail.test.ts` (7 tests) |
 | Time scrubber | `apps/web/src/components/TimeScrubber.tsx` | `time-scrubber` | Manual |
 | Camera strip + tile | `apps/web/src/components/CameraStrip.tsx`, `CameraTile.tsx` | `camera-<id>`, `cv-mode-*` | `apps/web/src/lib/detectionConfig.test.ts` |
 | Drone detail panel | `apps/web/src/components/DroneDetailPanel.tsx` | `drone-<id>` | `apps/fabric/src/drone.test.ts` |

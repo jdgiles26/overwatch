@@ -59,14 +59,27 @@ browser. See `docs/FEATURES.md` for the model registry.
 
 | File | Concern |
 |---|---|
-| `components/visionWorker.ts` | Web Worker hosting the VLM (LFM2-VL-450M-ONNX) for per-frame scene captioning. |
-| `components/droneDetectorWorker.ts` | Web Worker hosting the object-detector (DETR-ResNet-50) for drone-like detections. |
-| `lib/visionEngine.ts` | Shared frame submission + detection event bus for `visionWorker`. |
+| `components/visionWorker.ts` | Web Worker hosting the VLM (LFM2-VL-450M-ONNX) for per-frame scene captioning. 3-tier backend chain: WebGPU → WebGL (TF.js MobileNet) → WASM. |
+| `components/droneDetectorWorker.ts` | Web Worker hosting the object-detector (DETR-ResNet-50) for drone-like detections. 3-tier chain: WebGPU → WebGL (TF.js coco-ssd) → WASM. |
+| `lib/visionEngine.ts` | Shared frame submission + detection event bus for `visionWorker`. Handles `status:"fallback"` → `pushError`. |
 | `lib/droneDetectorEngine.ts` + `droneDetectorWorkerEngine.ts` | Same, for the YOLO-style detector. |
 | `lib/detectionConfig.ts` | `DetectionMode` enum (`off`/`yolo`/`vlm`/`both`) + parser + canonical model IDs. |
+| `lib/backendSelector.ts` | `selectDetectorBackend` priority chain + capability detection. |
+| `lib/cocoSsdAdapter.ts`, `lib/mobilenetVlmAdapter.ts` | Adapters that normalize TF.js model outputs into our `DetectorRawOutput` shape. |
+| `lib/frameCapture.ts` | OffscreenCanvas singleton with DOM-canvas fallback for ImageData extraction. |
+| `lib/boundingBox.ts` + `components/BoundingBoxOverlay.tsx` | Box normalization, severity colors, SVG overlay with glow. |
 
 Detections POST back to fabric at `/api/cv-event` (handled in
 `apps/fabric/src/index.ts`).
+
+### Cesium assets
+Cesium ships with a `Build/Cesium/` directory of Workers, Assets,
+Widgets, and ThirdParty libs. `cesium.com`'s CDN has no
+`Access-Control-Allow-Origin`, so the browser blocks loading from there.
+We mirror those assets into `public/cesium/` at `predev` / `prebuild`
+time via `scripts/copy-cesium-assets.mjs` and Map3D sets
+`window.CESIUM_BASE_URL = "/cesium/"`. Force-refresh with
+`pnpm --filter @overwatch/web cesium:assets`.
 
 ---
 

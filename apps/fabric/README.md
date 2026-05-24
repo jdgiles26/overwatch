@@ -21,6 +21,8 @@ clients.
 | `src/threatcon.ts` | Derives THREATCON level (`nominal` → `critical`) and the 7 PIRs from recent events |
 | `src/alerts.ts` | `RuleEngine.evaluate()` matches incoming events against persisted `AlertRule[]` and emits firings |
 | `src/drone.ts` | `DroneAggregator.process()` correlates RF detections into stable tracks; emits `drone-track` and `drone-classification` |
+| `src/rules.ts` | `normalizeRuleId()` — defensive id-handling for the `POST /api/rules` route. Empty / whitespace / non-string ids get a fresh `rule_<hex>` mint so new rules don't collide on `INSERT OR REPLACE`. |
+| `src/correlation.ts` | Pure Pearson r kernel + `isSignificantCorrelation(threshold=0.7)` predicate. Foundation for the multi-session "real-world correlation + AI report" feature tracked in `future/IDEAS.md` #11. No I/O. |
 
 Each non-trivial source file has a co-located `*.test.ts` (Vitest).
 
