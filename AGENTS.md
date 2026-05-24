@@ -8,7 +8,7 @@ This file is the canonical reference for AI coding agents working in the OverWat
 
 OverWatch is a real-time situational-awareness platform. It ingests events from 22+ external data sources (weather, seismic, air traffic, social media, IoT, drone RF, etc.), persists them to an encrypted SQLite database, computes threat levels (THREATCON), evaluates alert rules, and presents everything on a tactical dashboard with a 3D globe (Cesium), 2D map (MapLibre), camera feeds, and on-device AI (analyst chat + autonomous Overseer agent).
 
-The codebase is a **pnpm monorepo** with two applications and six packages. Only two packages are currently active; the rest are empty placeholders reserved for future extraction.
+The codebase is a **pnpm monorepo** with two applications and six packages. Two packages (`schemas`, `connectors`) hold all current shared code; the other four (`agent`, `ai`, `cv`, `ui`) are scaffolded placeholders — each has a valid `package.json`, `tsconfig.json`, and a `README.md` documenting the planned extraction scope and current source location. They will receive code lifted out of `apps/web` as that work happens.
 
 ---
 
@@ -42,10 +42,10 @@ overwatch/
 ├── packages/
 │   ├── schemas/         # Shared Zod schemas — ACTIVE
 │   ├── connectors/      # 22 data-source connectors — ACTIVE
-│   ├── agent/           # Placeholder (empty src/)
-│   ├── ai/              # Placeholder (empty src/)
-│   ├── cv/              # Placeholder (empty src/)
-│   └── ui/              # Placeholder (empty src/)
+│   ├── agent/           # Scaffolded — Overseer agent (see packages/agent/README.md)
+│   ├── ai/              # Scaffolded — on-device LLM/VLM (see packages/ai/README.md)
+│   ├── cv/              # Scaffolded — vision Workers (see packages/cv/README.md)
+│   └── ui/              # Scaffolded — shared React components (see packages/ui/README.md)
 ├── scripts/
 │   ├── seed-demo.ts     # Seeds fabric with demo locations, cameras, connectors
 │   ├── demo-drone-server.ts  # Simulated drone RF frames for local dev

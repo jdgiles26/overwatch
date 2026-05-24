@@ -140,6 +140,22 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@22.19.17)(vite@8.0.10(@types/node@22.19.17)(esbuild@0.27.7)(jiti@1.21.7)(tsx@4.21.0))
 
+  packages/agent:
+    dependencies:
+      '@overwatch/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+  packages/ai:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
   packages/connectors:
     dependencies:
       '@overwatch/schemas':
@@ -174,11 +190,27 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@22.19.17)(vite@8.0.10(@types/node@22.19.17)(esbuild@0.27.7)(jiti@1.21.7)(tsx@4.21.0))
 
+  packages/cv:
+    dependencies:
+      '@overwatch/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
   packages/schemas:
     dependencies:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+  packages/ui:
     devDependencies:
       typescript:
         specifier: ^5.9.2
