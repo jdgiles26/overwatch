@@ -37,24 +37,19 @@ The codebase is a **pnpm monorepo** with two applications and six packages. Two 
 ```
 overwatch/
 ├── apps/
-│   ├── fabric/          # Fastify backend (port 4311)
-│   └── web/             # Next.js dashboard (port 3311)
+│   ├── fabric/          # Fastify backend, port 4311 — see apps/fabric/README.md
+│   └── web/             # Next.js dashboard, port 3311 — see apps/web/README.md
 ├── packages/
-│   ├── schemas/         # Shared Zod schemas — ACTIVE
-│   ├── connectors/      # 22 data-source connectors — ACTIVE
+│   ├── schemas/         # Shared Zod schemas — ACTIVE (see packages/schemas/README.md)
+│   ├── connectors/      # 23 data-source connectors — ACTIVE (see packages/connectors/README.md)
 │   ├── agent/           # Scaffolded — Overseer agent (see packages/agent/README.md)
 │   ├── ai/              # Scaffolded — on-device LLM/VLM (see packages/ai/README.md)
 │   ├── cv/              # Scaffolded — vision Workers (see packages/cv/README.md)
 │   └── ui/              # Scaffolded — shared React components (see packages/ui/README.md)
-├── scripts/
-│   ├── seed-demo.ts     # Seeds fabric with demo locations, cameras, connectors
-│   ├── demo-drone-server.ts  # Simulated drone RF frames for local dev
-│   └── smoke-drone.ts   # Automated E2E smoke test for drone pipeline
-├── infra/
-│   ├── docker-compose.yml
-│   ├── Dockerfile.fabric
-│   ├── Dockerfile.web
-│   └── go2rtc.yaml      # RTSP/WebRTC camera proxy config
+├── scripts/             # Utility scripts (seed, smoke, demo) — see scripts/README.md
+├── infra/               # Docker + go2rtc — see infra/README.md
+├── docs/                # Feature inventory, plans, specs — see docs/README.md
+├── future/              # 10 forward-looking proposals — see future/IDEAS.md
 ├── package.json
 ├── pnpm-workspace.yaml
 └── tsconfig.base.json

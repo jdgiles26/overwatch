@@ -89,19 +89,31 @@ if/when you have production state worth preserving.
 
 ```
 apps/
-  web/      Next.js 15 + React 19 dashboard, 3D globe, analyst, overseer
-  fabric/   Fastify + WS hub + connector orchestrator + SQLite + threatcon
+  web/         Next.js 15 + React 19 dashboard, 3D globe, analyst, overseer
+  fabric/      Fastify + WS hub + connector orchestrator + SQLite + threatcon
 packages/
-  schemas/  Shared Zod schemas (events, threatcon, PIR, cameras…)
-  connectors/  22 connectors (NWS, USGS, EMSC, EONET, OpenAQ, OpenSky, ISS,
+  schemas/     Shared Zod schemas (events, threatcon, PIR, cameras, CV detections…)
+  connectors/  23 connectors (NWS, USGS, EMSC, EONET, OpenAQ, OpenSky, ISS,
                GDELT, HN, Reddit, GitHub, Open-Meteo, CoinGecko, SpaceX,
                NOAA SWPC, Wikipedia RC, NASA FIRMS, MQTT, Webhook, RSS,
-               REST poller, Demo simulator)
+               REST poller, Demo simulator, Drone RF)
+  agent/       Scaffolded — Overseer agent extraction target
+  ai/          Scaffolded — on-device LLM/VLM extraction target
+  cv/          Scaffolded — vision Workers extraction target
+  ui/          Scaffolded — shared React components extraction target
 infra/
   docker-compose.yml + Dockerfiles + go2rtc.yaml
 scripts/
-  seed-demo.ts
+  seed-demo.ts + demo-drone-server.ts + smoke-drone.ts
+docs/
+  FEATURES.md — canonical feature inventory
+  drone-detection-readme.md, plans/, specs/
+future/
+  IDEAS.md — 10 forward-looking proposals (capability, UX, security, DX)
 ```
+
+Each top-level folder has a `README.md` with files, conventions, and
+agent-friendly notes. Start there before editing.
 
 ## Connectors page
 
@@ -118,8 +130,10 @@ random key in `data/key.bin`).
 - `rtsp` — proxied through `go2rtc` (WHEP/WebRTC ≤500 ms)
 - `youtube` — embed
 
-Per-camera detectors run in a Web Worker (motion, fire heuristic, edges) and emit `cv` events
-back to the fabric.
+Per-camera detectors run in a Web Worker. Each tile has a detection
+mode: `OFF` / `YOLO` (DETR-ResNet-50 for drone-like objects) / `VLM`
+(LFM2-VL-450M for scene captioning) / `BOTH`. Detections emit `cv`
+events back to the fabric. See `apps/web/README.md` for the pipeline.
 
 ## AI
 
@@ -129,6 +143,19 @@ back to the fabric.
   reasons over a DOM outline of `data-agent`-tagged elements, and dispatches whitelisted
   actions (`click`, `flyTo`, `setView`, `toggleNightVision`, `navigate`, `say`, `stop`).
   Press <kbd>Esc</kbd> to abort.
+
+## Documentation map
+
+| You want to… | Read |
+|---|---|
+| Get running locally | This file, then `apps/fabric/README.md` + `apps/web/README.md` |
+| Add a data source | `packages/connectors/README.md` |
+| Add a domain type or WS message | `packages/schemas/README.md` |
+| Know what feature lives where | `docs/FEATURES.md` |
+| See AI-agent operating rules | `.agents/BASELINE.md` + `AGENTS.md` |
+| Propose a future enhancement | `future/IDEAS.md` |
+| Run with Docker | `infra/README.md` |
+| Run a utility script | `scripts/README.md` |
 
 Models are pulled from the Hugging Face CDN on first run and cached in the browser.
 
