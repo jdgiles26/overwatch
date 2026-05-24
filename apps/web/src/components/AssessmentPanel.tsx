@@ -1,13 +1,25 @@
 "use client";
+import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
-import { CheckCircle2, CircleAlert, ShieldAlert, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  CircleAlert,
+  ShieldAlert,
+  Sparkles,
+  MapPin,
+  ChevronDown,
+} from "lucide-react";
+import { buildPirEvidence, pirShowOnMapTarget } from "@/lib/pirDetail";
 
 export function AssessmentPanel() {
   const tc = useStore((s) => s.threatcon);
   const pirs = useStore((s) => s.pirs);
   const status = useStore((s) => s.status);
   const events = useStore((s) => s.events);
+  const select = useStore((s) => s.selectEvent);
+  const flyTo = useStore((s) => s.requestFlyTo);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const sevCounts = events.reduce(
     (acc, e) => {
@@ -82,32 +94,95 @@ export function AssessmentPanel() {
           Priority Intelligence
         </div>
         <ul className="space-y-1.5">
-          {pirs.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-start gap-2 rounded-md border border-white/5 bg-ink-800/50 p-2"
-              data-agent={`pir-${p.id}`}
-            >
-              <span
-                className={cn(
-                  "mt-0.5 inline-flex h-5 w-10 items-center justify-center rounded-full text-[10px] font-semibold uppercase",
-                  p.answer === "yes" && "bg-threat-high/20 text-threat-high",
-                  p.answer === "no" && "bg-threat-nominal/20 text-threat-nominal",
-                  p.answer === "unknown" && "bg-white/10 text-white/60",
-                )}
+          {pirs.map((p) => {
+            const isOpen = expanded === p.id;
+            const target = pirShowOnMapTarget(p, events);
+            const { events: evidence } = buildPirEvidence(p, events);
+            return (
+              <li
+                key={p.id}
+                className="rounded-md border border-white/5 bg-ink-800/50"
+                data-agent={`pir-${p.id}`}
               >
-                {p.answer}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-[12px] leading-tight text-white/80">
-                  {p.question}
-                </div>
-                {p.detail && (
-                  <div className="text-[10px] text-white/40">{p.detail}</div>
+                <button
+                  type="button"
+                  className="flex w-full items-start gap-2 p-2 text-left hover:bg-white/5"
+                  onClick={() => setExpanded(isOpen ? null : p.id)}
+                  aria-expanded={isOpen}
+                  data-agent={`pir-${p.id}-toggle`}
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 inline-flex h-5 w-10 items-center justify-center rounded-full text-[10px] font-semibold uppercase",
+                      p.answer === "yes" && "bg-threat-high/20 text-threat-high",
+                      p.answer === "no" && "bg-threat-nominal/20 text-threat-nominal",
+                      p.answer === "unknown" && "bg-white/10 text-white/60",
+                    )}
+                  >
+                    {p.answer}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12px] leading-tight text-white/80">
+                      {p.question}
+                    </div>
+                    {p.detail && (
+                      <div className="text-[10px] text-white/40">{p.detail}</div>
+                    )}
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      "mt-0.5 h-3.5 w-3.5 shrink-0 text-white/40 transition-transform",
+                      isOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {isOpen && (
+                  <div className="border-t border-white/5 p-2">
+                    <div className="mb-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn flex items-center gap-1 text-[11px] disabled:opacity-40"
+                        onClick={() => {
+                          if (!target) return;
+                          flyTo(target);
+                        }}
+                        disabled={!target}
+                        data-agent={`pir-${p.id}-show-on-map`}
+                      >
+                        <MapPin className="h-3 w-3" />
+                        Show on map
+                      </button>
+                      <span className="text-[10px] text-white/40">
+                        {evidence.length === 0
+                          ? "No linked evidence"
+                          : `${evidence.length} evidence event${evidence.length === 1 ? "" : "s"}`}
+                      </span>
+                    </div>
+                    {evidence.length > 0 && (
+                      <ul className="space-y-1">
+                        {evidence.slice(0, 6).map((e) => (
+                          <li key={e.id}>
+                            <button
+                              type="button"
+                              className="w-full truncate rounded px-2 py-1 text-left text-[11px] text-white/70 hover:bg-white/5"
+                              onClick={() => {
+                                select(e.id);
+                                if (e.geo) flyTo({ lat: e.geo.lat, lon: e.geo.lon, zoom: 7 });
+                              }}
+                              data-agent={`pir-${p.id}-evidence-${e.id}`}
+                            >
+                              <span className="text-white/40">[{e.severity}]</span>{" "}
+                              {e.title}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 )}
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </div>
 

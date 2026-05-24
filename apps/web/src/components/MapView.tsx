@@ -1,6 +1,11 @@
 "use client";
 import dynamic from "next/dynamic";
 import { useStore } from "@/lib/store";
+import {
+  SPLIT_GRID_CLASS,
+  MAP_SLOT_CLASS,
+  SINGLE_MAP_WRAPPER_CLASS,
+} from "@/lib/mapLayout";
 
 const Map3D = dynamic(() => import("./Map3D").then((m) => m.Map3D), {
   ssr: false,
@@ -16,18 +21,18 @@ export function MapView() {
 
   if (view === "split") {
     return (
-      <div className="grid h-full min-h-0 w-full grid-cols-2 gap-1">
-        <div className="relative h-full w-full overflow-hidden rounded-md">
+      <div className={SPLIT_GRID_CLASS}>
+        <div className={MAP_SLOT_CLASS}>
           <Map3D />
         </div>
-        <div className="relative h-full w-full overflow-hidden rounded-md">
+        <div className={MAP_SLOT_CLASS}>
           <Map2D />
         </div>
       </div>
     );
   }
   return (
-    <div className="relative h-full w-full overflow-hidden">
+    <div className={SINGLE_MAP_WRAPPER_CLASS}>
       {view === "map3d" ? <Map3D /> : <Map2D />}
     </div>
   );

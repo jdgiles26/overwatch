@@ -13,6 +13,7 @@ import {
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import { ensureNotifyPermission, playSound } from "@/lib/notify";
 import { cn } from "@/lib/cn";
+import { newRule as makeNewRule } from "@/lib/rules";
 
 type Rule = {
   id: string;
@@ -82,18 +83,10 @@ export default function RulesPage() {
   }, []);
 
   function newRule(): Rule {
-    return {
-      id: "",
-      label: "Severe weather near me",
-      enabled: true,
-      notify: { desktop: true, sound: true, soundKind: "chime", severityFloor: "moderate" },
-      condition: {
-        categories: ["weather"],
-        minSeverity: "moderate",
-        keywords: [],
-        rateLimitMs: 60_000,
-      },
-    };
+    // Draft has no id; the server assigns one on POST. Keeps "create new"
+    // distinct from "update existing"; before this fix, sending id="" caused
+    // every new rule to overwrite the previous one via INSERT OR REPLACE.
+    return makeNewRule() as Rule;
   }
 
   async function save(r: Rule) {

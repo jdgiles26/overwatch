@@ -23,6 +23,7 @@ import {
 import { orchestrator } from "./orchestrator.js";
 import { computePIR, computeThreatcon } from "./threatcon.js";
 import { RuleEngine } from "./alerts.js";
+import { normalizeRuleId } from "./rules.js";
 import { aggregator } from "./drone.js";
 import type { ServerToClient } from "@overwatch/schemas";
 import crypto from "node:crypto";
@@ -187,7 +188,7 @@ app.post("/api/rules", async (req, reply) => {
   const body = req.body as any;
   if (!body?.label) return reply.status(400).send({ error: "label required" });
   const rule = {
-    id: body.id ?? `rule_${crypto.randomBytes(5).toString("hex")}`,
+    id: normalizeRuleId(body.id),
     label: body.label,
     enabled: body.enabled ?? true,
     notify: {

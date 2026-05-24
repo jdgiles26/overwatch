@@ -222,3 +222,40 @@ in `store.ts`) — formalize and feed into incident grouping.
 toggle) and tune thresholds based on real event volumes.
 
 **Effort.** L (2 weeks; algorithm tuning is the long pole).
+
+---
+
+## 11. Real-world correlation analysis with AI-generated DOD report — `XL` (multi-session)
+
+**Status.** Foundation merged this session: `apps/fabric/src/correlation.ts`
+(Pearson r + `isSignificantCorrelation` predicate) and tests. The rest
+is planned across sessions 2–5 below.
+
+**Motivation.** Operators ask "did event stream A drive event stream B?"
+— e.g. did the geomagnetic-storm spike correlate with the GPS anomaly
+cluster? Today THREATCON is per-stream; there's no cross-stream answer.
+
+**Multi-session sketch.**
+
+| Session | Stage | Deliverable |
+|---|---|---|
+| 1 ✅ done | Foundation | `correlation.ts` Pearson kernel + significance gate, pure-stats |
+| 2 | Fabric route + bucketing | `POST /api/correlation` accepting two event filters + time window + bucket size, returning `{ r, significant, samples }` |
+| 3 | Web panel | `CorrelationPanel.tsx` — picker for two filters, view r over time, cross-highlight to intel feed + map |
+| 4 | Research connector | When `significant === true`, fire a one-shot scrape over a whitelisted RSS subset; persist excerpts to a new `research_notes` table |
+| 5 | DOD-format report | Compose result + scraped notes via on-device LLM (`apps/web/src/lib/ai.ts`); render Markdown → printable HTML with DOD layout (classification header, BLUF, findings, recommendations, sources) |
+
+**Blockers / risks.**
+- Pearson on bucketed event counts misses causality, time lag, and
+  confounders — document this in the panel; don't let users mistake
+  correlation for causation.
+- Scraping is rate-limited and may violate ToS; only the existing RSS
+  catalog whitelist, no closed-source sites without explicit opt-in.
+- LLM hallucination in the report — require citation back to scraped
+  excerpts and visibly mark anything not cite-able as inferred.
+
+**Dependencies.** `pearson` (done). Scraping piggybacks on the existing
+`rss` connector. The DOD report renderer is new and isolated.
+
+**Effort.** XL — split as above; no single session should attempt
+more than one stage.
