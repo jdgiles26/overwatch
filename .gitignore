@@ -50,6 +50,10 @@ Thumbs.db
 !.vscode/settings.json
 .idea/
 
+# AI-coding tool dirs (per-user, not project state)
+.claude/
+.factory/
+
 # Misc
 *.bak
 *.tmp
