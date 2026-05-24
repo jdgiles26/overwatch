@@ -1,11 +1,11 @@
 /// <reference lib="webworker" />
 
-// Vision worker — LiquidAI LFM2.5-VL-450M-ONNX (open-vocabulary VLM)
+// Vision worker — LiquidAI LFM2-VL-450M-ONNX (open-vocabulary VLM)
 // Uses WebGPU with fp16/q4f16 dtypes; falls back to WASM with q8 dtypes.
 // Receives raw RGBA frames + per-camera watch descriptors, returns a free-text
 // scene description. No fixed label set — the model describes whatever it sees.
 
-const MODEL_ID = "onnx-community/LFM2.5-VL-450M-ONNX";
+const MODEL_ID = "onnx-community/LFM2-VL-450M-ONNX";
 
 let processor: any = null;
 let model: any = null;
@@ -13,6 +13,7 @@ let RawImageCls: any = null;
 let ready = false;
 let loading = false;
 let busy = false;
+let currentDevice: string | null = null;
 
 async function load() {
   if (ready || loading) return;
@@ -30,16 +31,26 @@ async function load() {
       typeof (globalThis as any).navigator !== "undefined" &&
       typeof (globalThis as any).navigator.gpu !== "undefined";
 
+    let loaded = false;
+
     if (hasWebGPU) {
-      model = await AutoModelForImageTextToText.from_pretrained(MODEL_ID, {
-        device: "webgpu",
-        dtype: {
-          embed_tokens: "fp16",
-          decoder_model_merged: "q4f16",
-          vision_encoder: "fp16",
-        },
-      });
-    } else {
+      try {
+        model = await AutoModelForImageTextToText.from_pretrained(MODEL_ID, {
+          device: "webgpu",
+          dtype: {
+            embed_tokens: "fp16",
+            decoder_model_merged: "q4f16",
+            vision_encoder: "fp16",
+          },
+        });
+        currentDevice = "webgpu";
+        loaded = true;
+      } catch (webgpuErr) {
+        console.warn(`[visionWorker] WebGPU load failed, falling back to WASM: ${webgpuErr}`);
+      }
+    }
+
+    if (!loaded) {
       model = await AutoModelForImageTextToText.from_pretrained(MODEL_ID, {
         device: "wasm",
         dtype: {
@@ -48,10 +59,12 @@ async function load() {
           vision_encoder: "q8",
         },
       });
+      currentDevice = "wasm";
     }
 
+    loading = false;
     ready = true;
-    self.postMessage({ type: "status", status: "ready", device: hasWebGPU ? "webgpu" : "wasm" });
+    self.postMessage({ type: "status", status: "ready", device: currentDevice });
   } catch (err) {
     loading = false;
     self.postMessage({ type: "status", status: "error", error: String(err) });

@@ -21,25 +21,45 @@ interface OverseerArgs {
   isPaused: () => boolean;
 }
 
-const SYSTEM = `You are OverWatch Overseer, an autonomous agent navigating a tactical OSINT dashboard.
-Return EXACTLY ONE JSON object per turn — nothing else. Allowed actions:
-  {"action":"click","target":"<data-agent value>"}
-  {"action":"flyToTopEvent"}                     // jump to the highest-severity event
-  {"action":"flyTo","lat":<num>,"lon":<num>,"zoom":<num>}
-  {"action":"setView","value":"map3d"|"map2d"|"split"}
-  {"action":"toggleNightVision","value":true|false}
-  {"action":"openAnalyst","value":true|false}
-  {"action":"openOverseer","value":false}
-  {"action":"navigate","value":"/connectors" | "/"}
-  {"action":"selectCategory","value":"weather"|"seismic"|"air"|"transport"|"power"|"fire"|"news"|"iot"|"cv"|"space"|"finance"|"social"}
-  {"action":"selectSeverity","value":"info"|"low"|"moderate"|"high"|"extreme"}
-  {"action":"clearFilters"}
-  {"action":"say","value":"final summary including any findings"}
-  {"action":"stop","value":"why"}
-You will receive: the mission, last step result, a list of available data-agent targets,
-a compact live-state snapshot (THREATCON, PIR answers, top 5 events with geo), and a
-vision caption of what's currently rendered. Plan iteratively. End with {"action":"say",...}
-when the mission is complete or after BUDGET steps.`;
+const SYSTEM = `You are OverWatch Overseer, an autonomous browser agent.
+
+OUTPUT FORMAT (STRICT):
+Reply with ONE valid JSON object on a single line. No prose, no markdown, no code fences.
+Do NOT echo the schema or examples. Do NOT print field names like "say" or "vision" as text.
+
+ALLOWED ACTIONS (pick exactly one per turn):
+{"action":"click","target":"<data-agent>"}
+{"action":"flyToTopEvent"}
+{"action":"flyTo","lat":<num>,"lon":<num>,"zoom":<num>}
+{"action":"setView","value":"map3d"|"map2d"|"split"}
+{"action":"toggleNightVision","value":true|false}
+{"action":"openAnalyst","value":true|false}
+{"action":"openOverseer","value":false}
+{"action":"navigate","value":"/connectors"|"/"}
+{"action":"selectCategory","value":"weather"|"seismic"|"air"|"transport"|"power"|"fire"|"news"|"iot"|"cv"|"space"|"finance"|"social"}
+{"action":"selectSeverity","value":"info"|"low"|"moderate"|"high"|"extreme"}
+{"action":"clearFilters"}
+{"action":"say","value":"<final summary text>"}
+{"action":"stop","value":"<reason>"}
+
+EXAMPLES:
+Mission "Switch to 3D globe and fly to the highest-severity event."
+Turn 1 -> {"action":"setView","value":"map3d"}
+Turn 2 -> {"action":"flyToTopEvent"}
+Turn 3 -> {"action":"say","value":"Switched to 3D and flew to highest-severity event."}
+
+Mission "Open Connectors page and report enabled sources."
+Turn 1 -> {"action":"navigate","value":"/connectors"}
+Turn 2 -> {"action":"say","value":"Connectors page open. Enabled: NWS, USGS, OpenAQ."}
+
+Mission "Toggle night vision, then summarize what changed."
+Turn 1 -> {"action":"toggleNightVision","value":true}
+Turn 2 -> {"action":"say","value":"Night vision enabled. UI now in green-on-black mode."}
+
+RULES:
+- End with {"action":"say",...} when the mission is complete or you've hit BUDGET.
+- Use {"action":"click","target":...} only with a target shown in TARGETS list.
+- Never put English words outside the JSON.`;
 
 export async function runOverseer(a: OverseerArgs) {
   const { onStep, onProgress, onDevice, shouldStop, isPaused, budget, mission } = a;
@@ -214,7 +234,7 @@ function liveSnapshot(): string {
   ].join("\n");
 }
 
-function parseAction(raw: string): { action: string; [k: string]: any } | null {
+export function parseAction(raw: string): { action: string; [k: string]: any } | null {
   // Try fenced code blocks first.
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) {
@@ -234,7 +254,8 @@ function parseAction(raw: string): { action: string; [k: string]: any } | null {
       }
     }
     const candidate = raw.slice(i, j + 1);
-    if (!candidate.includes('"action"')) continue;
+    // Accept either "action" (JSON) or 'action' (small-model variant); tryJson cleans up.
+    if (!/['"]action['"]/.test(candidate)) continue;
     const obj = tryJson(candidate);
     if (obj && typeof obj.action === "string") return obj;
   }
@@ -245,12 +266,14 @@ function tryJson(s: string): any | null {
   try {
     return JSON.parse(s);
   } catch {
-    // attempt minor cleanup (single-quotes, trailing commas)
+    // attempt minor cleanup (single-quotes around keys/values, trailing commas)
     try {
       const cleaned = s
         .replace(/,\s*}/g, "}")
         .replace(/,\s*]/g, "]")
-        .replace(/'(\w+)'\s*:/g, '"$1":');
+        // Convert single-quoted simple tokens (keys or scalar values) to double-quoted.
+        // Restricted to safe chars so we don't mangle quoted prose containing apostrophes.
+        .replace(/'([\w\s\-./:]+)'/g, '"$1"');
       return JSON.parse(cleaned);
     } catch {
       return null;
@@ -258,7 +281,7 @@ function tryJson(s: string): any | null {
   }
 }
 
-function extractThought(raw: string): string {
+export function extractThought(raw: string): string {
   const before = raw.split("{")[0]?.trim() ?? "";
   return before.length ? before.slice(0, 320) : "(no commentary)";
 }

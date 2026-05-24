@@ -148,8 +148,23 @@ export const CameraFeed = z.object({
   whepUrl: z.string().optional(),
   hlsUrl: z.string().optional(),
   detectors: z.array(z.string()).default([]),
+  detectionMode: z.enum(["off", "yolo", "vlm", "both"]).default("both"),
 });
 export type CameraFeed = z.infer<typeof CameraFeed>;
+
+export const CvDetection = z.object({
+  cameraId: z.string(),
+  label: z.string(),
+  score: z.number(),
+  box: z.object({
+    xmin: z.number(),
+    ymin: z.number(),
+    xmax: z.number(),
+    ymax: z.number(),
+  }),
+  isDroneLike: z.boolean(),
+});
+export type CvDetection = z.infer<typeof CvDetection>;
 
 export const AlertRuleCondition = z.object({
   categories: z.array(EventCategory).optional(),
@@ -197,6 +212,7 @@ export const ServerToClient = z.discriminatedUnion("type", [
   z.object({ type: z.literal("rules"), data: z.array(AlertRule) }),
   z.object({ type: z.literal("drone-track"), data: DroneTrack }),
   z.object({ type: z.literal("drone-classification"), data: DroneClassification }),
+  z.object({ type: z.literal("cv-detection"), data: z.array(CvDetection) }),
 ]);
 export type ServerToClient = z.infer<typeof ServerToClient>;
 

@@ -163,6 +163,32 @@ export async function getOrCreatePipeline(
   return promise;
 }
 
+/**
+ * Detects degenerate repetition loops in small-model output (e.g. SmolLM2-360M
+ * answering "what model are you" with "a model of a model of a model…").
+ * Returns true when the tail of `text` contains 4+ non-overlapping occurrences
+ * of any 8-80 character substring.
+ */
+export function detectRepetitionLoop(text: string): boolean {
+  if (text.length < 60) return false;
+  const tail = text.slice(-600);
+  for (let len = 8; len <= 80; len++) {
+    if (tail.length < len * 4) continue;
+    const unit = tail.slice(-len);
+    if (unit.trim().length < 6) continue;
+    let count = 0;
+    let idx = 0;
+    while (idx <= tail.length - len) {
+      const found = tail.indexOf(unit, idx);
+      if (found < 0) break;
+      count++;
+      idx = found + len; // non-overlapping
+      if (count >= 4) return true;
+    }
+  }
+  return false;
+}
+
 export async function runChat(args: RunChatArgs): Promise<RunChatHandle> {
   const { TextStreamer, InterruptableStoppingCriteria } = await getTransformers();
   const device = await detectDevice();
@@ -194,6 +220,12 @@ export async function runChat(args: RunChatArgs): Promise<RunChatHandle> {
       if (text) {
         acc += text;
         args.onToken?.(text);
+        // Hard cut-off if the small model starts looping the same phrase.
+        // Detects 4+ consecutive repetitions of any 12+ char substring.
+        if (detectRepetitionLoop(acc)) {
+          aborted = true;
+          stopping?.interrupt();
+        }
       }
     },
   });
@@ -204,7 +236,8 @@ export async function runChat(args: RunChatArgs): Promise<RunChatHandle> {
       do_sample: true,
       temperature: args.temperature ?? 0.5,
       top_p: 0.9,
-      repetition_penalty: 1.05,
+      repetition_penalty: 1.2,
+      no_repeat_ngram_size: 6,
       streamer,
     };
     if (stopping) opts.stopping_criteria = stopping;

@@ -11,7 +11,12 @@ import type {
   Location,
   PIR,
   ThreatCon,
+  CvDetection,
 } from "@overwatch/schemas";
+
+import { DetectionMode } from "./detectionConfig";
+
+export type { DetectionMode };
 
 export type FilterState = {
   categories: Set<string>;
@@ -48,6 +53,11 @@ export type Store = {
   followDroneId: string | null;
   // NLI-derived topic tags keyed by event id
   eventTopics: Record<string, string[]>;
+  // AI detection mode & YOLO detections
+  globalDetectionMode: DetectionMode;
+  yoloDetections: Record<string, CvDetection[]>;
+  yoloModelStatus: string;
+  vlmModelStatus: string;
 
   setView: (v: View) => void;
   setNightVision: (v: boolean) => void;
@@ -75,6 +85,10 @@ export type Store = {
   setDroneClassification: (id: string, c: DroneClassification) => void;
   setFollowDrone: (id: string | null) => void;
   setEventTopics: (id: string, topics: string[]) => void;
+  setGlobalDetectionMode: (mode: DetectionMode) => void;
+  setYoloDetections: (cameraId: string, detections: CvDetection[]) => void;
+  setYoloModelStatus: (s: string) => void;
+  setVlmModelStatus: (s: string) => void;
 };
 
 export const useStore = create<Store>((set, get) => ({
@@ -100,6 +114,10 @@ export const useStore = create<Store>((set, get) => ({
   droneClassifications: {},
   followDroneId: null,
   eventTopics: {},
+  globalDetectionMode: DetectionMode.Both,
+  yoloDetections: {},
+  yoloModelStatus: "idle",
+  vlmModelStatus: "idle",
 
   setView: (v) => set({ view: v }),
   setNightVision: (v) => set({ nightVision: v }),
@@ -167,6 +185,11 @@ export const useStore = create<Store>((set, get) => ({
   setFollowDrone: (id) => set({ followDroneId: id }),
   setEventTopics: (id, topics) =>
     set({ eventTopics: { ...get().eventTopics, [id]: topics } }),
+  setGlobalDetectionMode: (mode) => set({ globalDetectionMode: mode }),
+  setYoloDetections: (cameraId, detections) =>
+    set({ yoloDetections: { ...get().yoloDetections, [cameraId]: detections } }),
+  setYoloModelStatus: (s) => set({ yoloModelStatus: s }),
+  setVlmModelStatus: (s) => set({ vlmModelStatus: s }),
 }));
 
 export function applyFilter(

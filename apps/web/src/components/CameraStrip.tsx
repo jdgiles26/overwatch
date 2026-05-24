@@ -4,11 +4,13 @@ import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import type { CameraFeed } from "@overwatch/schemas";
 import { useStore } from "@/lib/store";
 import { CameraTile } from "./CameraTile";
-import { Plus, X, Video, Cpu } from "lucide-react";
+import { Plus, X, Video, Cpu, Crosshair } from "lucide-react";
 import { onModelStatus } from "@/lib/visionEngine";
+import { onDroneDetectorStatus } from "@/lib/droneDetectorWorkerEngine";
+import type { DetectionMode } from "@/lib/store";
 
 // Detector presets — user can click these or type custom terms
-const DETECTOR_PRESETS = ["person", "vehicle", "fire", "motion", "crowd", "package", "weapon"];
+const DETECTOR_PRESETS = ["person", "vehicle", "fire", "motion", "crowd", "package", "weapon", "drone"];
 
 export function CameraStrip() {
   const cameras = useStore((s) => s.cameras);
@@ -20,10 +22,18 @@ export function CameraStrip() {
   });
   const [detectorInput, setDetectorInput] = useState("");
   const [modelStatus, setModelStatus] = useState<string>("idle");
+  const [yoloStatus, setYoloStatus] = useState<string>("idle");
+  const globalDetectionMode = useStore((s) => s.globalDetectionMode);
+  const setGlobalDetectionMode = useStore((s) => s.setGlobalDetectionMode);
 
   // Track LFM model status globally in the strip header
   useEffect(() => {
     const unsub = onModelStatus((s) => setModelStatus(s));
+    return () => { unsub(); };
+  }, []);
+
+  useEffect(() => {
+    const unsub = onDroneDetectorStatus((s) => setYoloStatus(s));
     return () => { unsub(); };
   }, []);
 
@@ -43,6 +53,7 @@ export function CameraStrip() {
             whepUrl: c.whep_url ?? undefined,
             hlsUrl: c.hls_url ?? undefined,
             detectors: Array.isArray(c.detectors) ? c.detectors : [],
+            detectionMode: (c.detectionMode as any) ?? undefined,
           })),
         ),
       )
@@ -99,6 +110,7 @@ export function CameraStrip() {
         whepUrl: cam.whepUrl,
         hlsUrl: cam.hlsUrl,
         detectors: cam.detectors,
+        detectionMode: globalDetectionMode,
       },
     ]);
     setOpen(false);
@@ -129,6 +141,24 @@ export function CameraStrip() {
       ? "LFM error"
       : "";
 
+  const yoloStatusColor =
+    yoloStatus === "ready"
+      ? "text-accent-400"
+      : yoloStatus === "loading"
+      ? "text-yellow-400 animate-pulse"
+      : yoloStatus === "error"
+      ? "text-red-400"
+      : "text-white/30";
+
+  const yoloStatusLabel =
+    yoloStatus === "ready"
+      ? "YOLO ready"
+      : yoloStatus === "loading"
+      ? "YOLO loading…"
+      : yoloStatus === "error"
+      ? "YOLO error"
+      : "";
+
   return (
     <div
       className="flex h-32 items-stretch gap-2 border-t border-white/5 bg-ink-900/70 p-2"
@@ -149,6 +179,27 @@ export function CameraStrip() {
             <Cpu className="h-2.5 w-2.5" /> {statusLabel}
           </span>
         )}
+        {yoloStatusLabel && (
+          <span className={`flex items-center gap-0.5 text-[9px] ${yoloStatusColor}`}>
+            <Crosshair className="h-2.5 w-2.5" /> {yoloStatusLabel}
+          </span>
+        )}
+        {/* Detection mode toggle */}
+        <div className="mt-1 flex gap-0.5 text-[8px]">
+          {(["both", "yolo", "vlm", "off"] as DetectionMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setGlobalDetectionMode(mode)}
+              className={`rounded px-1.5 py-0.5 uppercase transition ${
+                globalDetectionMode === mode
+                  ? "bg-accent-400/20 text-accent-400"
+                  : "text-white/30 hover:text-white/50"
+              }`}
+            >
+              {mode === "both" ? "ALL" : mode.toUpperCase()}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="scrollable flex flex-1 gap-2 overflow-x-auto">
         {cameras.map((c) => (
@@ -298,7 +349,7 @@ export function CameraStrip() {
                   </div>
                 )}
                 <div className="mt-1 text-[10px] text-white/30">
-                  The LFM vision model will focus on these terms. Any natural language description works.
+                  The VLM vision model will focus on these terms. YOLO detects drones/aircraft automatically.
                 </div>
               </Field>
             </div>

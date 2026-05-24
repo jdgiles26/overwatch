@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { CameraFeed } from "@overwatch/schemas";
-import { Activity, Eye, GripVertical, Trash2, Maximize2, X } from "lucide-react";
+import { Activity, Eye, GripVertical, Trash2, Maximize2, X, Crosshair, MessageSquare } from "lucide-react";
 import { submitFrame, onDetection, onModelStatus } from "@/lib/visionEngine";
+import { submitDroneFrame, onDroneDetection, onDroneDetectorStatus } from "@/lib/droneDetectorWorkerEngine";
 import { useStore } from "@/lib/store";
+import { detectionModesForCamera } from "@/lib/detectionConfig";
 
 
 function youtubeEmbedUrl(src: string): string {
@@ -138,9 +140,17 @@ export function CameraTile({
     };
   }, [theater, camera]);
 
-  // ── AI detection via shared vision worker ────────────────────────────────
+  // ── AI detection via shared vision + YOLO workers ──────────────────────────
+  const globalDetectionMode = useStore((s) => s.globalDetectionMode);
+  const setYoloDetections = useStore((s) => s.setYoloDetections);
+  const activeDetectionMode = camera.detectionMode ?? globalDetectionMode;
+  const activeModes = detectionModesForCamera(activeDetectionMode);
+  const hasDetectors = !!camera.detectors && camera.detectors.length > 0;
+  const hasVlm = activeModes.includes("vlm") && hasDetectors;
+  const hasYolo = activeModes.includes("yolo");
+
   useEffect(() => {
-    if (!camera.detectors || camera.detectors.length === 0) return;
+    if (!hasVlm) return;
 
     const unsubStatus = onModelStatus(() => { /* status tracked globally */ });
     const unsubDetection = onDetection(camera.id, (msg) => {
@@ -153,22 +163,54 @@ export function CameraTile({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          id: `cv-${camera.id}-${Date.now()}`,
+          id: `cv-vlm-${camera.id}-${Date.now()}`,
           title: `${camera.label}: ${summary}`,
           summary,
           severity: "moderate",
           geo: camera.geo,
-          payload: { cameraId: camera.id, detectors: camera.detectors },
+          payload: { cameraId: camera.id, detectors: camera.detectors, source: "vlm" },
         }),
       }).catch(() => undefined);
     });
 
     return () => { unsubStatus(); unsubDetection(); };
-  }, [camera]);
+  }, [camera, hasVlm]);
+
+  useEffect(() => {
+    if (!hasYolo) return;
+
+    const unsubStatus = onDroneDetectorStatus(() => { /* status tracked globally */ });
+    const unsubDetection = onDroneDetection(camera.id, (msg) => {
+      const detections = msg.detections ?? [];
+      if (!detections.length) return;
+
+      setDetections((n) => n + detections.length);
+      setLastSummary(msg.summary ?? "");
+
+      if (msg.detections) {
+        setYoloDetections(camera.id, msg.detections);
+      }
+
+      fetch("/fabric/api/cv-event", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: `cv-yolo-${camera.id}-${Date.now()}`,
+          title: msg.title ?? `${camera.label}: YOLO detection`,
+          summary: msg.summary ?? "",
+          severity: msg.severity ?? "moderate",
+          geo: camera.geo,
+          payload: { cameraId: camera.id, source: "yolo", detections: msg.detections, inferenceMs: msg.inferenceMs },
+        }),
+      }).catch(() => undefined);
+    });
+
+    return () => { unsubStatus(); unsubDetection(); };
+  }, [camera, hasYolo, setYoloDetections]);
 
   // ── Frame extraction loop ────────────────────────────────────────────────
   useEffect(() => {
-    if (!camera.detectors || camera.detectors.length === 0) return;
+    if (!hasVlm && !hasYolo) return;
     const v = videoRef.current;
     const c = canvasRef.current;
     if (!v || !c) return;
@@ -181,15 +223,27 @@ export function CameraTile({
         c.height = 180;
         ctx.drawImage(v, 0, 0, 320, 180);
         const imgData = ctx.getImageData(0, 0, 320, 180);
-        // Copy before transfer so the canvas buffer isn't neutered
-        const copy = new Uint8ClampedArray(imgData.data).buffer;
-        submitFrame(camera.id, copy, 320, 180, camera.detectors);
+        const source = imgData.data.buffer;
+
+        // Each worker receives an INDEPENDENT ArrayBuffer because postMessage
+        // transfers (detaches) the buffer. Sharing a single buffer between
+        // both submitFrame and submitDroneFrame would throw DataCloneError
+        // on the second transfer.
+        if (hasVlm) {
+          const vlmBuf = source.slice(0);
+          submitFrame(camera.id, vlmBuf, 320, 180, camera.detectors);
+        }
+        if (hasYolo) {
+          const yoloBuf = source.slice(0);
+          submitDroneFrame(camera.id, yoloBuf, 320, 180, camera.geo);
+        }
       }
-      timer = window.setTimeout(tick, 2000);
+      const interval = hasYolo ? 1000 : 2000; // YOLO is faster, sample more often
+      timer = window.setTimeout(tick, interval);
     };
-    timer = window.setTimeout(tick, 4000); // wait for model to load first
+    timer = window.setTimeout(tick, 4000);
     return () => clearTimeout(timer);
-  }, [camera]);
+  }, [camera, hasVlm, hasYolo]);
 
   // ── Drag-to-reorder (within the strip, no CameraStrip changes needed) ────
   function handleDragStart(e: React.DragEvent) {
@@ -282,6 +336,16 @@ export function CameraTile({
               title={lastSummary || undefined}
             >
               <Eye className="inline h-3 w-3" /> {detections}
+            </span>
+          )}
+          {hasYolo && (
+            <span className="rounded bg-accent-400/20 px-1 py-0.5 text-[9px] text-accent-400" title="YOLO drone detection active">
+              <Crosshair className="inline h-2.5 w-2.5" />
+            </span>
+          )}
+          {hasVlm && (
+            <span className="rounded bg-blue-400/20 px-1 py-0.5 text-[9px] text-blue-400" title="VLM scene analysis active">
+              <MessageSquare className="inline h-2.5 w-2.5" />
             </span>
           )}
         </div>
