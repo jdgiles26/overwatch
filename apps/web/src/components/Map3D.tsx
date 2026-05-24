@@ -60,17 +60,21 @@ export function Map3D() {
     let viewer: any = null;
     (async () => {
       const Cesium = await import("cesium");
-      // Inline minimal Cesium widget styles
+      // Load Cesium Workers / Assets / Widgets / ThirdParty from our own
+      // origin. The cesium.com CDN does not send Access-Control-Allow-Origin
+      // on its Worker scripts, so browsers blocked them with a CORS error
+      // and Map3D's terrain picker failed to initialize. Assets are mirrored
+      // into apps/web/public/cesium by scripts/copy-cesium-assets.mjs
+      // (predev / prebuild). To refresh after a Cesium version bump:
+      //   pnpm --filter @overwatch/web cesium:assets
       if (!document.getElementById("cesium-widgets-css")) {
         const link = document.createElement("link");
         link.id = "cesium-widgets-css";
         link.rel = "stylesheet";
-        link.href =
-          "https://cesium.com/downloads/cesiumjs/releases/1.125/Build/Cesium/Widgets/widgets.css";
+        link.href = "/cesium/Widgets/widgets.css";
         document.head.appendChild(link);
       }
-      (window as any).CESIUM_BASE_URL =
-        "https://cesium.com/downloads/cesiumjs/releases/1.125/Build/Cesium/";
+      (window as any).CESIUM_BASE_URL = "/cesium/";
       Cesium.Ion.defaultAccessToken =
         process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN ?? "";
 
