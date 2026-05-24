@@ -1,6 +1,15 @@
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Pin the workspace root so Next.js doesn't auto-select a stray
+  // lockfile from $HOME and break module resolution for dynamic chunks
+  // (Cesium / @huggingface/transformers). Required after Next 15.5.x.
+  outputFileTracingRoot: resolve(__dirname, "../.."),
   serverExternalPackages: [
     "@huggingface/transformers",
     "onnxruntime-node",
