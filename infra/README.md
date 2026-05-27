@@ -21,6 +21,23 @@ docker compose -f infra/docker-compose.yml up --build
 pnpm seed                   # seed demo data once stack is up
 ```
 
+`web` waits for `fabric` to pass a healthcheck (`GET /health`) before
+starting, so the browser will not hit a connection-refused on the
+first request.
+
+### Pointing the browser at a non-default fabric
+
+`NEXT_PUBLIC_*` values are inlined into the web bundle at **build time**
+by Next.js, not read at runtime. Override them as build args (compose
+already wires them through):
+
+```bash
+NEXT_PUBLIC_FABRIC_URL=http://fabric.local:4311 \
+NEXT_PUBLIC_FABRIC_WS=ws://fabric.local:4311 \
+NEXT_PUBLIC_GO2RTC_URL=http://fabric.local:1984 \
+docker compose -f infra/docker-compose.yml build web
+```
+
 ---
 
 ## Volumes & state
@@ -40,11 +57,12 @@ every encrypted connector config in the DB unreadable.
 |---|---|
 | `3311` | web (Next.js) |
 | `4311` | fabric (Fastify + WS) |
-| `1984` | go2rtc HTTP API |
-| `8555` | go2rtc WebRTC (UDP) |
+| `1984` | go2rtc HTTP API + WHEP |
+| `8555/tcp` | go2rtc WebRTC (TCP fallback) |
+| `8555/udp` | go2rtc WebRTC (preferred) |
 
 Change these in `docker-compose.yml`; if you change the fabric port,
-also update `NEXT_PUBLIC_FABRIC_WS` for the web service.
+also rebuild `web` with a matching `NEXT_PUBLIC_FABRIC_WS` build arg.
 
 ---
 
@@ -66,12 +84,15 @@ latency is achievable over WebRTC.
 
 ## Notes for agents
 
-- The compose file uses host networking for some ports; on macOS,
-  `host` mode is not honored — the published ports above are what's
-  reachable from your browser.
-- Dockerfile.fabric runs `pnpm install --frozen-lockfile`; if you
-  change the lockfile, the next `docker build` will fail without
-  `--no-frozen-lockfile` or with stale cached layers — invalidate
-  with `--no-cache` when needed.
+- `go2rtc` previously used `network_mode: host`, which Docker Desktop
+  on macOS silently ignores. It now publishes `1984/tcp` and
+  `8555/tcp+udp` explicitly so the documented ports work on every host.
+- Both Dockerfiles run `pnpm install --frozen-lockfile=false`; if you
+  change the lockfile, rebuilds pick up the new graph without
+  `--no-cache`. Pin to `--frozen-lockfile` only after wiring CI lock
+  verification.
+- `NEXT_PUBLIC_*` env vars must be passed as **build args** to the
+  `web` service, not runtime env — Next.js inlines them into the
+  bundle at compile time.
 - Don't bake secrets into Dockerfiles. Connector API keys go through
   the fabric's encrypted at-rest store.

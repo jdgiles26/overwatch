@@ -177,7 +177,7 @@ the synthesized `DroneCvEvent` is upgraded to severity `"high"`.
 
 ## 6. Connector catalog
 
-22 connectors live in `packages/connectors/src/sources/`. The catalog is
+23 connectors live in `packages/connectors/src/sources/`. The catalog is
 exported via `ALL_CONNECTORS` in `packages/connectors/src/index.ts`. Each
 connector exports `{ id, label, configSchema, defaultConfig, start }`.
 

@@ -47,7 +47,7 @@ packages/schemas      Shared Zod schemas — IngestEvent, ThreatCon, PIR, DroneT
                        CameraFeed, AlertRule, ServerToClient WS union, etc.
                        All domain types originate here. Import from @overwatch/schemas.
 
-packages/connectors   22 data-source connectors (NWS, USGS, EMSC, EONET, OpenAQ,
+packages/connectors   23 data-source connectors (NWS, USGS, EMSC, EONET, OpenAQ,
                        OpenSky, ISS, GDELT, HN, Reddit, GitHub, Open-Meteo,
                        CoinGecko, SpaceX, NOAA SWPC, Wikipedia RC, NASA FIRMS,
                        MQTT, Webhook, RSS, REST poller, Demo simulator, Drone RF).

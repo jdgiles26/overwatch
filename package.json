@@ -11,7 +11,8 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "seed": "tsx scripts/seed-demo.ts",
-    "verify": "pnpm typecheck && pnpm lint"
+    "drift": "tsx scripts/drift-check.ts",
+    "verify": "pnpm typecheck && pnpm lint && pnpm drift"
   },
   "devDependencies": {
     "tsx": "^4.20.1",

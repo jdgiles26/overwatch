@@ -156,6 +156,7 @@ events back to the fabric. See `apps/web/README.md` for the pipeline.
 | Propose a future enhancement | `future/IDEAS.md` |
 | Run with Docker | `infra/README.md` |
 | Run a utility script | `scripts/README.md` |
+| See what's documented-but-not-true (and fix it) | `DRIFT.md` + `docs/specs/drift-recovery/` |
 
 Models are pulled from the Hugging Face CDN on first run and cached in the browser.
 
