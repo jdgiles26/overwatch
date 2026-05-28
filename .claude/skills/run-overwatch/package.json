@@ -1,0 +1,9 @@
+{
+  "name": "@overwatch/run-skill-driver",
+  "private": true,
+  "type": "module",
+  "description": "Puppeteer-based driver for the run-overwatch skill. Isolated from the workspace so puppeteer-core stays out of the app dep tree.",
+  "dependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}
