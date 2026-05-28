@@ -197,6 +197,34 @@ const checks: Check[] = [
   },
 
   {
+    id: "dockerfile-pnpm-matches-packagemanager",
+    title: "Dockerfiles pin the same pnpm version as root packageManager (no deps-status wipe loop)",
+    run: () => {
+      const root = read("package.json");
+      const m = /"packageManager"\s*:\s*"pnpm@(\d+\.\d+\.\d+)/.exec(root);
+      if (!m) return "package.json has no packageManager pin — pnpm version is ambiguous";
+      const expected = m[1];
+      const files = ["infra/Dockerfile.fabric", "infra/Dockerfile.web"];
+      const offenders: string[] = [];
+      for (const f of files) {
+        const body = read(f);
+        const pin = /corepack prepare pnpm@(\d+\.\d+\.\d+)/.exec(body);
+        if (!pin) {
+          offenders.push(`${f}: missing \`corepack prepare pnpm@<version> --activate\``);
+          continue;
+        }
+        if (pin[1] !== expected) {
+          offenders.push(`${f}: pins pnpm@${pin[1]} but root packageManager is pnpm@${expected} — pnpm will try to wipe + reinstall node_modules at runtime and fail with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`);
+        }
+        if (!/ENV CI=true/.test(body)) {
+          offenders.push(`${f}: missing \`ENV CI=true\` — pnpm prompts without it`);
+        }
+      }
+      return offenders.length ? offenders.join("\n  ") : null;
+    },
+  },
+
+  {
     id: "cesium-externalized",
     title: "Cesium is externalized in webpack (avoids the V8 octal parse error)",
     run: () => {
