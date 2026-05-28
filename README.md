@@ -39,8 +39,14 @@ pnpm seed
 
 ## First-run: encryption key and SQLite DB
 
-On the first start of the fabric backend, two files are created automatically inside
-`apps/fabric/data/` (the directory is created if it doesn't exist):
+On the first start of the fabric backend, two files are created automatically. The
+path depends on how you run it:
+
+- `pnpm dev` (local) — files land in `apps/fabric/data/`
+- `docker compose up` — files land in the `overwatch_data` named volume mounted at
+  `/data` inside the fabric container (see `infra/docker-compose.yml`)
+
+In either case, two files are created if they don't exist:
 
 | File | What it is | Created by |
 |---|---|---|

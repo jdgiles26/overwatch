@@ -6,7 +6,7 @@ independent — pick any folder and ship it.
 
 | # | Folder | Drift item | TDD entry point |
 |---|---|---|---|
-| 01 | `01-docker-deployment/` | `infra/` Docker stack on macOS + `NEXT_PUBLIC_*` baking + first-run paths | `tests/compose.contract.test.ts` |
+| ~~01~~ | _resolved 2026-05-27_ | Docker stack on macOS + `NEXT_PUBLIC_*` baking + first-run paths + Cesium octal parse + `FABRIC_URL` proxy | enforced by `scripts/drift-check.ts` (5 asserts) |
 | 02 | `02-package-extraction-agent/` | `@overwatch/agent` is a placeholder | `tests/agent-extraction.test.ts` |
 | 03 | `03-package-extraction-ai/` | `@overwatch/ai` is a placeholder | `tests/ai-extraction.test.ts` |
 | 04 | `04-package-extraction-cv/` | `@overwatch/cv` is a placeholder | `tests/cv-extraction.test.ts` |

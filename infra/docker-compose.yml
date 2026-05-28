@@ -26,10 +26,14 @@ services:
       context: ..
       dockerfile: infra/Dockerfile.web
       args:
-        # Bake at build time — Next.js inlines NEXT_PUBLIC_* into the bundle
+        # Bake at build time — Next.js inlines NEXT_PUBLIC_* into the bundle.
         NEXT_PUBLIC_FABRIC_URL: ${NEXT_PUBLIC_FABRIC_URL:-http://localhost:4311}
         NEXT_PUBLIC_FABRIC_WS: ${NEXT_PUBLIC_FABRIC_WS:-ws://localhost:4311}
         NEXT_PUBLIC_GO2RTC_URL: ${NEXT_PUBLIC_GO2RTC_URL:-http://localhost:1984}
+        # next.config.mjs `rewrites()` reads FABRIC_URL at build time.
+        # `fabric` is the compose service DNS name, reachable from the
+        # web container. Override per-deploy via FABRIC_URL build arg.
+        FABRIC_URL: ${FABRIC_URL:-http://fabric:4311}
     ports:
       - "3311:3311"
     environment:

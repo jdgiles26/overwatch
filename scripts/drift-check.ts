@@ -98,7 +98,8 @@ const checks: Check[] = [
       if (!exists("DRIFT.md")) return "DRIFT.md missing — covered by drift-md-present";
       const required = [
         "docs/specs/drift-recovery/README.md",
-        "docs/specs/drift-recovery/01-docker-deployment/SPEC.md",
+        // 01-docker-deployment resolved 2026-05-27 — constraints
+        // enforced by the cesium-* / fabric-url / compose-* asserts below.
         "docs/specs/drift-recovery/02-package-extraction-agent/SPEC.md",
         "docs/specs/drift-recovery/03-package-extraction-ai/SPEC.md",
         "docs/specs/drift-recovery/04-package-extraction-cv/SPEC.md",
@@ -175,6 +176,70 @@ const checks: Check[] = [
       return /app\.get\(\s*["']\/health["']/.test(body)
         ? null
         : "apps/fabric/src/index.ts no longer registers GET /health — compose healthcheck will fail";
+    },
+  },
+
+  {
+    id: "cesium-externalized",
+    title: "Cesium is externalized in webpack (avoids the V8 octal parse error)",
+    run: () => {
+      const cfg = read("apps/web/next.config.mjs");
+      const hasExternal = /\bcesium:\s*\{[^}]*root:\s*["']Cesium["']/.test(cfg);
+      if (!hasExternal) {
+        return "apps/web/next.config.mjs does not externalize `cesium` to the `Cesium` global — Cesium 1.140's bundled chunks will fail to parse with 'Octal escape sequences are not allowed in template strings'";
+      }
+      const layout = read("apps/web/src/app/layout.tsx");
+      if (!/id=["']cesium-umd["']/.test(layout) || !/\/cesium\/Cesium\.js/.test(layout)) {
+        return "apps/web/src/app/layout.tsx must render <Script id=\"cesium-umd\" src=\"/cesium/Cesium.js\" strategy=\"beforeInteractive\" /> so the global is available before Map3D mounts";
+      }
+      return null;
+    },
+  },
+
+  {
+    id: "no-direct-cesium-imports",
+    title: "Client code uses loadCesium() helper, not `await import(\"cesium\")`",
+    run: () => {
+      // Glob would be heavier; rely on the known sites under apps/web/src.
+      const targets = [
+        "apps/web/src/components/Map3D.tsx",
+        "apps/web/src/components/DroneTrackLayer.tsx",
+      ];
+      const bad: string[] = [];
+      for (const t of targets) {
+        if (!exists(t)) continue;
+        const body = read(t);
+        if (/await\s+import\(\s*["']cesium["']\s*\)/.test(body)) {
+          bad.push(`${t} still uses await import("cesium") — switch to loadCesium() from @/lib/cesium`);
+        }
+      }
+      return bad.length ? bad.join("\n  ") : null;
+    },
+  },
+
+  {
+    id: "dockerfile-web-bakes-fabric-url",
+    title: "Dockerfile.web accepts FABRIC_URL as a build ARG (rewrites need it)",
+    run: () => {
+      const df = read("infra/Dockerfile.web");
+      return /ARG\s+FABRIC_URL\b/.test(df)
+        ? null
+        : "infra/Dockerfile.web does not declare ARG FABRIC_URL — Next.js rewrites get baked with localhost:4311 default and the in-container proxy 500s on /fabric/api/*";
+    },
+  },
+
+  {
+    id: "compose-passes-fabric-url-build-arg",
+    title: "docker-compose passes FABRIC_URL into the web build",
+    run: () => {
+      const body = read("infra/docker-compose.yml");
+      // Must appear inside the web service's `args:` block, not just env.
+      // A simple substring check suffices because the only legitimate use
+      // site is the build args block.
+      const inArgs = /args:[\s\S]*?FABRIC_URL/.test(body);
+      return inArgs
+        ? null
+        : "infra/docker-compose.yml does not pass FABRIC_URL as a build arg under the web service";
     },
   },
 ];

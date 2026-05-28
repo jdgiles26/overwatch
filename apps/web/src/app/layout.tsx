@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { ConsoleFilter } from "@/components/ConsoleFilter";
 import { PwaRegister } from "@/components/PwaRegister";
@@ -20,6 +21,18 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
+      <head>
+        {/* Cesium 1.140's webpack chunks contain template literals with
+            `\00` legacy octal escapes that V8 refuses to parse. We load
+            the Cesium UMD release here and treat `import "cesium"` as
+            the `Cesium` global via webpack externals (see next.config.mjs).
+            Asset is mirrored from node_modules by scripts/copy-cesium-assets.mjs. */}
+        <Script
+          src="/cesium/Cesium.js"
+          strategy="beforeInteractive"
+          id="cesium-umd"
+        />
+      </head>
       <body className="min-h-screen antialiased">
         <ConsoleFilter />
         <PwaRegister />

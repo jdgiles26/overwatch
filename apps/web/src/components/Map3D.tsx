@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef } from "react";
 import { applyFilter, useStore } from "@/lib/store";
+import { loadCesium } from "@/lib/cesium";
 import { DroneTrackLayer } from "./DroneTrackLayer";
 import type { IngestEvent } from "@overwatch/schemas";
 
@@ -59,13 +60,10 @@ export function Map3D() {
     let destroyed = false;
     let viewer: any = null;
     (async () => {
-      const Cesium = await import("cesium");
+      const Cesium = await loadCesium();
       // Load Cesium Workers / Assets / Widgets / ThirdParty from our own
-      // origin. The cesium.com CDN does not send Access-Control-Allow-Origin
-      // on its Worker scripts, so browsers blocked them with a CORS error
-      // and Map3D's terrain picker failed to initialize. Assets are mirrored
-      // into apps/web/public/cesium by scripts/copy-cesium-assets.mjs
-      // (predev / prebuild). To refresh after a Cesium version bump:
+      // origin. Mirrored into apps/web/public/cesium by
+      // scripts/copy-cesium-assets.mjs (predev / prebuild). Refresh with:
       //   pnpm --filter @overwatch/web cesium:assets
       if (!document.getElementById("cesium-widgets-css")) {
         const link = document.createElement("link");
@@ -74,7 +72,6 @@ export function Map3D() {
         link.href = "/cesium/Widgets/widgets.css";
         document.head.appendChild(link);
       }
-      (window as any).CESIUM_BASE_URL = "/cesium/";
       Cesium.Ion.defaultAccessToken =
         process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN ?? "";
 
@@ -147,7 +144,7 @@ export function Map3D() {
     (async () => {
       const viewer = viewerRef.current;
       if (!viewer) return;
-      const Cesium = await import("cesium");
+      const Cesium = await loadCesium();
       if (cancelled) return;
       const seenIds = new Set(visibleEvents.map((e) => e.id));
       // Remove gone
@@ -258,7 +255,7 @@ export function Map3D() {
     );
     if (!recent || !recent.geo || !viewerRef.current) return;
     (async () => {
-      const Cesium = await import("cesium");
+      const Cesium = await loadCesium();
       viewerRef.current.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(
           recent.geo!.lon,
@@ -277,7 +274,7 @@ export function Map3D() {
     if (!track || track.state === "expired") { setFollowDrone(null); return; }
     const geo = track.positionHistory.at(-1)?.geo ?? track.geo;
     (async () => {
-      const Cesium = await import("cesium");
+      const Cesium = await loadCesium();
       viewerRef.current.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(
           geo.lon, geo.lat, (geo.alt ?? 0) + 800,
@@ -296,7 +293,7 @@ export function Map3D() {
   useEffect(() => {
     if (!flyTo || !viewerRef.current) return;
     (async () => {
-      const Cesium = await import("cesium");
+      const Cesium = await loadCesium();
       viewerRef.current.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(
           flyTo.lon,
@@ -325,3 +322,4 @@ function severityColor(Cesium: any, sev: string): any {
   if (sev === "low") return c("#5cf0c9");
   return c("#38e0b2").withAlpha(0.85);
 }
+

@@ -20,12 +20,15 @@ const nextConfig = {
   },
   webpack: (config, { isServer }) => {
     config.resolve = config.resolve ?? {};
-    // Don't try to bundle native binaries on server.
+    config.externals = config.externals || [];
+    if (!Array.isArray(config.externals)) {
+      config.externals = [config.externals];
+    }
     if (isServer) {
-      config.externals = config.externals || [];
-      if (Array.isArray(config.externals)) {
-        config.externals.push("@huggingface/transformers", "onnxruntime-node");
-      }
+      // Don't try to bundle native binaries on server.
+      config.externals.push("@huggingface/transformers", "onnxruntime-node");
+      // Cesium is browser-only; never let SSR try to load it.
+      config.externals.push("cesium");
     } else {
       // Stub Node-only packages for the browser bundle.
       config.resolve.fallback = {
@@ -36,6 +39,24 @@ const nextConfig = {
         path: false,
         crypto: false,
       };
+      // Cesium 1.140's bundled chunks embed draco/ktx2 WebAssembly as
+      // template literals containing `\00` (legacy octal escape), which
+      // V8 refuses to parse — "Octal escape sequences are not allowed
+      // in template strings." The Cesium release UMD is mirrored to
+      // apps/web/public/cesium/Cesium.js by scripts/copy-cesium-assets.mjs
+      // and loaded as a global via a <Script id="cesium-umd"
+      // strategy="beforeInteractive"> in app/layout.tsx. The full UMD
+      // form below makes webpack resolve `import "cesium"` (static or
+      // dynamic) to the `Cesium` global regardless of the module
+      // system the consumer uses.
+      config.externals.push({
+        cesium: {
+          root: "Cesium",
+          commonjs: "Cesium",
+          commonjs2: "Cesium",
+          amd: "Cesium",
+        },
+      });
     }
     return config;
   },

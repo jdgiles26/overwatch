@@ -40,35 +40,11 @@ docs disagree with each other. Everywhere else, drift is doc-vs-code.
 
 ## 2. Deployment
 
-### 2.1 Docker compose — **RESOLVED 2026-05-27**
-
-Previously broken on macOS:
-
-- `go2rtc` ran with `network_mode: host`, which Docker Desktop on macOS
-  silently ignores. The ports the README promised (`1984`, `8555`)
-  were unreachable.
-- `web` received `NEXT_PUBLIC_*` as runtime env, but Next.js inlines
-  those at build time. The browser bundle pointed at whatever the
-  Dockerfile defaulted to, regardless of compose env.
-- No healthcheck on `fabric`. `web` came up first, the browser hit a
-  connection-refused, the dev hit refresh, and the symptom was "the
-  app doesn't load."
-- A band-aid `ENTRYPOINT ["/bin/bash", "-c"]` had crept into
-  `Dockerfile.fabric` (unstaged on `main`); resolved by reverting to
-  the direct `CMD` exec form on top of the new compose.
-
-Recovery shipped in `infra/docker-compose.yml`,
-`infra/Dockerfile.web`, and `infra/README.md`. Spec lives at
-`docs/specs/drift-recovery/01-docker-deployment/`.
-
-### 2.2 First-run local dev paths — **OPEN**
-
-Root README states `apps/fabric/data/` is where `overwatch.db` and
-`key.bin` are created. True for `pnpm dev`, false for the Docker
-path (those land in the `overwatch_data` named volume mounted at
-`/data`). Both are correct in their own context but the README
-presents the local path as universal. Owner spec:
-`docs/specs/drift-recovery/01-docker-deployment/`.
+> All Docker / first-run rows have been resolved as of 2026-05-27 and
+> removed from this register per the recovery rules. The constraints are
+> now enforced mechanically in `scripts/drift-check.ts` so a regression
+> would fail `pnpm verify` before it ever shipped. The next agent should
+> add new deployment drift rows here if they appear.
 
 ---
 

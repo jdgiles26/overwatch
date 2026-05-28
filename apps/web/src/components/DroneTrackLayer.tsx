@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
+import { loadCesium } from "@/lib/cesium";
 import type { DroneClassification, DroneTrack } from "@overwatch/schemas";
 
 const DRONE_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="%23fff" opacity="0.9"/><line x1="12" y1="12" x2="4" y2="4" stroke="%23fff" stroke-width="1.5" opacity="0.7"/><line x1="12" y1="12" x2="20" y2="4" stroke="%23fff" stroke-width="1.5" opacity="0.7"/><line x1="12" y1="12" x2="4" y2="20" stroke="%23fff" stroke-width="1.5" opacity="0.7"/><line x1="12" y1="12" x2="20" y2="20" stroke="%23fff" stroke-width="1.5" opacity="0.7"/><circle cx="4" cy="4" r="2.5" fill="%23fff" opacity="0.8"/><circle cx="20" cy="4" r="2.5" fill="%23fff" opacity="0.8"/><circle cx="4" cy="20" r="2.5" fill="%23fff" opacity="0.8"/><circle cx="20" cy="20" r="2.5" fill="%23fff" opacity="0.8"/></svg>`;
@@ -40,7 +41,7 @@ export function DroneTrackLayer({ viewerRef }: Props) {
     (async () => {
       const viewer = viewerRef.current;
       if (!viewer) return;
-      const Cesium = await import("cesium");
+      const Cesium = await loadCesium();
       if (cancelled) return;
 
       const activeIds = new Set(droneTracks.map((t) => t.id));
