@@ -180,6 +180,23 @@ const checks: Check[] = [
   },
 
   {
+    id: "fabric-handles-sigterm",
+    title: "Fabric handles SIGTERM (Docker default) — not just SIGINT",
+    run: () => {
+      const body = read("apps/fabric/src/index.ts");
+      const hasInt = /process\.on\(\s*["']SIGINT["']/.test(body);
+      const hasTerm = /process\.on\(\s*["']SIGTERM["']/.test(body);
+      if (!hasInt || !hasTerm) {
+        return "apps/fabric/src/index.ts must handle both SIGINT and SIGTERM — Docker sends SIGTERM by default and will SIGKILL after the 10s grace if it's unhandled";
+      }
+      if (!/\.listen\([^)]*\)[\s\S]{0,200}\.catch\(/.test(body)) {
+        return "apps/fabric/src/index.ts: app.listen() must have a .catch — otherwise a bind failure is silently swallowed";
+      }
+      return null;
+    },
+  },
+
+  {
     id: "cesium-externalized",
     title: "Cesium is externalized in webpack (avoids the V8 octal parse error)",
     run: () => {

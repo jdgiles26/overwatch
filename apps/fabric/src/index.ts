@@ -342,12 +342,40 @@ startThreatLoop();
 
 app
   .listen({ port: PORT, host: "0.0.0.0" })
-  .then(() => app.log.info(`fabric listening on ${PORT}`));
+  .then(() => app.log.info(`fabric listening on ${PORT}`))
+  .catch((err) => {
+    app.log.error({ err }, "fabric failed to bind");
+    process.exit(1);
+  });
 
-process.on("SIGINT", () => {
+let shuttingDown = false;
+function shutdown(signal: NodeJS.Signals) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  app.log.info({ signal }, "fabric shutting down");
   if (threatTimer) clearInterval(threatTimer);
   orchestrator.stop();
   aggregator.stop();
-  db.close();
-  app.close().then(() => process.exit(0));
+  // Force-exit if Fastify hangs on close (slow WS clients can stall it).
+  setTimeout(() => process.exit(1), 5_000).unref();
+  app
+    .close()
+    .then(() => {
+      db.close();
+      process.exit(0);
+    })
+    .catch((err) => {
+      app.log.error({ err }, "error during shutdown");
+      db.close();
+      process.exit(1);
+    });
+}
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+process.on("uncaughtException", (err) => {
+  app.log.error({ err }, "uncaughtException");
+});
+process.on("unhandledRejection", (reason) => {
+  app.log.error({ reason }, "unhandledRejection");
 });
