@@ -161,7 +161,7 @@ export function CameraStrip() {
 
   return (
     <div
-      className="flex h-32 items-stretch gap-2 border-t border-white/5 bg-ink-900/70 p-2"
+      className="flex min-h-32 items-stretch gap-2 border-t border-white/5 bg-ink-900/70 p-2"
       data-agent="camera-strip"
     >
       <div className="flex w-32 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/10 text-xs text-white/50">

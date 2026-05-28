@@ -41,7 +41,10 @@ export function CameraTile({
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"connecting" | "live" | "offline">("connecting");
 
-  // Tile width for resize (16:9, default 224 = w-56)
+  // Tile width for resize (16:9, default 224 = w-56). Min keeps the controls
+  // legible; max is generous so a single tile can take most of the strip.
+  const MIN_WIDTH = 160;
+  const MAX_WIDTH = 1024;
   const [tileWidth, setTileWidth] = useState(224);
   const tileHeight = Math.round(tileWidth * (9 / 16));
   const resizeStart = useRef<{ x: number; w: number } | null>(null);
@@ -273,7 +276,7 @@ export function CameraTile({
   }
   function onResizeMove(e: React.PointerEvent) {
     if (!resizeStart.current) return;
-    setTileWidth(Math.max(160, Math.min(540, resizeStart.current.w + (e.clientX - resizeStart.current.x))));
+    setTileWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, resizeStart.current.w + (e.clientX - resizeStart.current.x))));
   }
   function onResizeUp(e: React.PointerEvent) {
     (e.target as Element).releasePointerCapture(e.pointerId);
@@ -350,8 +353,22 @@ export function CameraTile({
           )}
         </div>
 
-        {/* Bottom controls — identical to original */}
-        <div className="absolute inset-x-1 bottom-1 flex justify-between gap-1 opacity-0 transition group-hover:opacity-100">
+        {/* Error overlay sits BEHIND the controls and is pointer-transparent,
+            so a failed video doesn't block the trash/theater/resize buttons. */}
+        {error && (
+          <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center bg-black/70 px-2 text-center text-[10px] text-threat-high">
+            <Activity className="mr-1 h-3 w-3" /> {error}
+          </div>
+        )}
+
+        {/* Bottom controls — z-20 so they sit above the error overlay and
+            stay clickable on failed videos. Always visible (no hover gate)
+            when the video has errored, so users can recover quickly. */}
+        <div
+          className={`absolute inset-x-1 bottom-1 z-20 flex justify-between gap-1 transition ${
+            error ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
+        >
           <button
             onClick={() => setTheater(true)}
             className="rounded bg-black/60 p-1 text-white/80 hover:text-white"
@@ -361,20 +378,18 @@ export function CameraTile({
           <button
             onClick={onRemove}
             className="rounded bg-black/60 p-1 text-white/80 hover:text-threat-high"
+            aria-label="Remove camera"
+            title="Remove camera"
           >
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
 
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70 px-2 text-center text-[10px] text-threat-high">
-            <Activity className="mr-1 h-3 w-3" /> {error}
-          </div>
-        )}
-
-        {/* Resize grip — bottom-right, same hover visibility as bottom controls */}
+        {/* Resize grip — z-20 so it's above the error overlay too. */}
         <div
-          className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize opacity-0 transition group-hover:opacity-60"
+          className={`absolute bottom-0 right-0 z-20 h-4 w-4 cursor-se-resize transition ${
+            error ? "opacity-60" : "opacity-0 group-hover:opacity-60"
+          }`}
           style={{ touchAction: "none" }}
           onPointerDown={onResizeDown}
           onPointerMove={onResizeMove}
