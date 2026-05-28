@@ -116,6 +116,25 @@ export interface RunChatHandle {
 const _pipelineCache = new Map<string, any>();
 const _pipelineLoading = new Map<string, Promise<any>>();
 
+// Some HF "onnx-community" exports ship decoder subgraphs that fail strict
+// graph validation in newer onnxruntime-web releases — most commonly:
+//   "Subgraph output (logits) is an outer scope value being returned directly.
+//    Please update the model to add an Identity node between the outer scope
+//    value and the subgraph output."
+// The bad node lives in the *quantized* graph, so cycling through dtypes
+// usually finds a variant that loads. Try requested → fp16 → q4 → q8.
+function isOnnxGraphValidationError(err: unknown): boolean {
+  const msg = (err as any)?.message ?? String(err ?? "");
+  return /Subgraph output|InitializeStateFromModelFileGraphProto|invalid model|Identity node/i.test(
+    msg,
+  );
+}
+
+function dtypeFallbackOrder(requested: string): string[] {
+  const ordered = ["fp16", "q4", "q8"];
+  return [requested, ...ordered.filter((d) => d !== requested)];
+}
+
 function pushFallbackError(message: string) {
   try {
     const { pushError } = useStore.getState();
@@ -132,6 +151,41 @@ function clearFallbackError() {
   } catch {
     /* SSR */
   }
+}
+
+async function tryPipeline(
+  pipeline: any,
+  task: string,
+  model: string,
+  device: "webgpu" | "wasm",
+  dtypes: string[],
+  onProgress: ((msg: string) => void) | undefined,
+): Promise<{ p: any; dtype: string } | { error: unknown }> {
+  let lastError: unknown = null;
+  for (const dtype of dtypes) {
+    try {
+      onProgress?.(`Loading ${model} on ${device.toUpperCase()} (${dtype})…`);
+      const p = await pipeline(task, model, {
+        device,
+        dtype,
+        session_options: SESSION_OPTIONS,
+        progress_callback: makeProgressCallback(onProgress, model),
+      });
+      return { p, dtype };
+    } catch (err) {
+      lastError = err;
+      if (isOnnxGraphValidationError(err)) {
+        console.warn(
+          `[ai] ${model} dtype=${dtype} failed ONNX graph validation (${(err as any)?.message ?? err}); trying next dtype`,
+        );
+        continue;
+      }
+      // Non-validation failure (network, OOM, no WebGPU adapter, etc.) — stop
+      // and let the caller decide what to do next.
+      return { error: err };
+    }
+  }
+  return { error: lastError };
 }
 
 export async function getOrCreatePipeline(
@@ -151,45 +205,50 @@ export async function getOrCreatePipeline(
 
   const promise = (async () => {
     try {
-      // --- Try WebGPU first ---
+      const order = dtypeFallbackOrder(dtype);
+
+      // --- Try WebGPU across all fallback dtypes ---
       if (device === "webgpu") {
-        onProgress?.(`Loading ${model} on WebGPU…`);
-        try {
-          const p = await pipeline(task, model, {
-            device: "webgpu",
-            dtype,
-            session_options: SESSION_OPTIONS,
-            progress_callback: makeProgressCallback(onProgress, model),
-          });
-          _pipelineCache.set(cacheKey, p);
-          clearFallbackError();
-          return p;
-        } catch (err) {
-          console.warn(`[ai] WebGPU pipeline failed, falling back to WASM: ${err}`);
-          pushFallbackError(
-            `WebGPU unavailable for ${model} — falling back to WASM. Inference will be slower.`,
-          );
+        const r = await tryPipeline(pipeline, task, model, "webgpu", order, onProgress);
+        if ("p" in r) {
+          _pipelineCache.set(cacheKey, r.p);
+          if (r.dtype !== dtype) {
+            pushFallbackError(
+              `${model} loaded on WebGPU with dtype=${r.dtype} (${dtype} was rejected by ONNX Runtime).`,
+            );
+          } else {
+            clearFallbackError();
+          }
+          return r.p;
         }
+        console.warn(`[ai] WebGPU pipeline failed for ${model} (all dtypes); falling back to WASM. Last error:`, r.error);
       } else {
         pushFallbackError(
           `WebGPU not detected for ${model} — using WASM. Inference will be slower.`,
         );
       }
 
-      // --- WASM fallback ---
+      // --- WASM fallback (q8 is safest; try in order if it fails too) ---
       const wasmKey = `${task}:${model}:wasm:q8`;
       const wasmCached = _pipelineCache.get(wasmKey);
       if (wasmCached) return wasmCached;
 
-      onProgress?.(`Loading ${model} on WASM (fallback)…`);
-      const p = await pipeline(task, model, {
-        device: "wasm",
-        dtype: "q8",
-        session_options: SESSION_OPTIONS,
-        progress_callback: makeProgressCallback(onProgress, model),
-      });
-      _pipelineCache.set(wasmKey, p);
-      return p;
+      const wasmOrder = ["q8", "fp16", "q4"];
+      const w = await tryPipeline(pipeline, task, model, "wasm", wasmOrder, onProgress);
+      if ("p" in w) {
+        _pipelineCache.set(wasmKey, w.p);
+        if (device === "webgpu") {
+          pushFallbackError(
+            `WebGPU rejected ${model} (likely an invalid ONNX subgraph in the quantized export). Loaded on WASM with dtype=${w.dtype} — inference will be slower. Try a different model from the picker.`,
+          );
+        }
+        return w.p;
+      }
+      const msg = (w.error as any)?.message ?? String(w.error);
+      pushFallbackError(
+        `Could not load ${model} on any backend. The ONNX export may be incompatible with this onnxruntime-web build (${msg.slice(0, 160)}). Try a different model from the picker.`,
+      );
+      throw w.error;
     } finally {
       _pipelineLoading.delete(cacheKey);
     }
