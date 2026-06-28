@@ -26,15 +26,9 @@
 
 ## 1. Snapshot
 
-| Metric | Claim location | Claim | Reality (2026-05-27) |
-|---|---|---|---|
-| Connector count | `CLAUDE.md`, `docs/FEATURES.md §6` header | 22 | **23** (see `packages/connectors/src/sources/`) [auto] |
-| Connector count | root `README.md`, `apps/web/README.md` quickstart, `handoff.md` | 23 | 23 (consistent) |
-| Tracked tests | `handoff.md §4` | 196 | needs re-count; `handoff.md` is two sessions stale |
-| Working tree | `handoff.md` header | clean at `98889b0` | tip is past `98889b0`; document is stale |
-
-The two-versus-three connector wording is the only place where the
-docs disagree with each other. Everywhere else, drift is doc-vs-code.
+ALL pre-2026-06-27 snapshot rows have been resolved — CLAUDE.md and
+`FEATURES.md` both correctly say 23 connectors (see §6), `DRIFT.md` itself
+holds the last snapshot at this date. New snapshots should use today's date.
 
 ---
 

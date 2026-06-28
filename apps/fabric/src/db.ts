@@ -89,7 +89,8 @@ db.exec(`
     lat REAL, lon REAL,
     whep_url TEXT,
     hls_url TEXT,
-    detectors TEXT
+    detectors TEXT,
+    detection_mode TEXT DEFAULT 'both'
   );
 
   CREATE TABLE IF NOT EXISTS locations (
@@ -126,6 +127,15 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_firings_at ON alert_firings(fired_at DESC);
 `);
+
+// ── Migrations for existing databases ──────────────────────────────────────
+// ALTER TABLE ADD COLUMN is safe to re-run; it throws if the column exists,
+// so we wrap in a try/catch.
+try {
+  db.exec(`ALTER TABLE cameras ADD COLUMN detection_mode TEXT DEFAULT 'both'`);
+} catch {
+  /* column already exists — no action needed */
+}
 
 const insertEvent = db.prepare(`
   INSERT OR REPLACE INTO events
@@ -222,7 +232,7 @@ export function listCameras(): any[] {
 
 export function upsertCamera(c: any) {
   db.prepare(
-    `INSERT OR REPLACE INTO cameras (id, label, source, kind, lat, lon, whep_url, hls_url, detectors) VALUES (?,?,?,?,?,?,?,?,?)`,
+    `INSERT OR REPLACE INTO cameras (id, label, source, kind, lat, lon, whep_url, hls_url, detectors, detection_mode) VALUES (?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     c.id,
     c.label,
@@ -230,9 +240,10 @@ export function upsertCamera(c: any) {
     c.kind,
     c.lat ?? null,
     c.lon ?? null,
-    c.whepUrl ?? null,
-    c.hlsUrl ?? null,
+    c.whepUrl ?? c.whep_url ?? null,
+    c.hlsUrl ?? c.hls_url ?? null,
     JSON.stringify(c.detectors ?? []),
+    c.detectionMode ?? c.detection_mode ?? "both",
   );
 }
 

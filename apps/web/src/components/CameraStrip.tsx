@@ -53,7 +53,7 @@ export function CameraStrip() {
             whepUrl: c.whep_url ?? undefined,
             hlsUrl: c.hls_url ?? undefined,
             detectors: Array.isArray(c.detectors) ? c.detectors : [],
-            detectionMode: (c.detectionMode as any) ?? undefined,
+            detectionMode: c.detection_mode ?? c.detectionMode ?? undefined,
           })),
         ),
       )
@@ -94,6 +94,7 @@ export function CameraStrip() {
       whepUrl: draft.whepUrl,
       hlsUrl: draft.hlsUrl,
       detectors: draft.detectors,
+      detectionMode: globalDetectionMode,
     };
     await apiPost("/api/cameras", cam);
     setCameras([

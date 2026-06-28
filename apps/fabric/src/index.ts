@@ -124,7 +124,7 @@ app.delete("/api/locations/:id", async (req) => {
 });
 
 app.get("/api/cameras", async () =>
-  listCameras().map((c) => ({ ...c, detectors: safeParse(c.detectors) })),
+  listCameras().map((c) => ({ ...c, detectors: safeParse(c.detectors), detection_mode: c.detection_mode ?? "both" })),
 );
 app.post("/api/cameras", async (req) => {
   upsertCamera(req.body);

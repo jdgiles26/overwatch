@@ -57,9 +57,14 @@ export function CameraTile({
     let cancelled = false;
     const onPlaying = () => setStatus("live");
     const onError = () => setStatus("offline");
+    // For WebRTC streams, "stalled" is expected during ICE renegotiation
+    // — only treat it as offline for non-WebRTC streams.
+    const onStalled = () => {
+      if (camera.kind !== "rtsp") setStatus("offline");
+    };
     v.addEventListener("playing", onPlaying);
     v.addEventListener("error", onError);
-    v.addEventListener("stalled", onError);
+    v.addEventListener("stalled", onStalled);
 
     async function start() {
       try {
@@ -101,7 +106,9 @@ export function CameraTile({
           const whep =
             camera.whepUrl ??
             `${process.env.NEXT_PUBLIC_GO2RTC_URL ?? "http://localhost:1984"}/api/webrtc?src=${encodeURIComponent(camera.id)}`;
-          pcRef.current = await playWhep(v!, whep);
+          const { pc, stream: whepStream } = await playWhep(v!, whep);
+          pcRef.current = pc;
+          streamRef.current = whepStream;
         }
       } catch (e: any) {
         if (!cancelled) { setError(e.message ?? String(e)); setStatus("offline"); }
@@ -113,7 +120,7 @@ export function CameraTile({
       cancelled = true;
       v.removeEventListener("playing", onPlaying);
       v.removeEventListener("error", onError);
-      v.removeEventListener("stalled", onError);
+      v.removeEventListener("stalled", onStalled);
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       try { hlsRef.current?.destroy(); hlsRef.current = null; } catch { /* ignore */ }
@@ -136,6 +143,10 @@ export function CameraTile({
     } else if (camera.kind === "hls" || camera.kind === "mjpeg" || (camera.kind as string) === "direct") {
       tv.src = camera.source;
       tv.crossOrigin = "anonymous";
+      tv.play().catch(() => undefined);
+    } else if (pcRef.current && videoRef.current?.srcObject) {
+      // WebRTC/RTSP — reuse the MediaStream already on the primary video
+      tv.srcObject = videoRef.current.srcObject;
       tv.play().catch(() => undefined);
     }
     const primaryVideo = videoRef.current;
@@ -233,6 +244,7 @@ export function CameraTile({
     }
 
     let timer = 0;
+    let started = false;
     const tick = () => {
       const captured = captureFrameRGBA(v, 320, 180);
       if (captured) {
@@ -242,8 +254,32 @@ export function CameraTile({
       const interval = hasYolo ? 1000 : 2000;
       timer = window.setTimeout(tick, interval);
     };
-    timer = window.setTimeout(tick, 4000);
-    return () => clearTimeout(timer);
+
+    // Wait for the video to have data before starting the capture loop.
+    // For WebRTC/HLS streams, readyState may stay at 0 until the first
+    // frame arrives. We listen for "loadeddata" to start sooner than a
+    // fixed 4-second delay, but cap the wait at 6 seconds as a fallback.
+    const startCapture = () => {
+      if (started) return;
+      started = true;
+      // Small initial delay for model warm-up after video becomes ready
+      timer = window.setTimeout(tick, 1000);
+    };
+
+    if (v.readyState >= 2) {
+      // Already has data (e.g. re-mount, webcam)
+      timer = window.setTimeout(tick, 1000);
+      started = true;
+    } else {
+      v.addEventListener("loadeddata", startCapture, { once: true });
+      // Fallback: if loadeddata never fires (broken stream), start after 6s
+      timer = window.setTimeout(startCapture, 6000);
+    }
+
+    return () => {
+      clearTimeout(timer);
+      v.removeEventListener("loadeddata", startCapture);
+    };
   }, [camera, hasVlm, hasYolo, pushError]);
 
   // ── Drag-to-reorder (within the strip, no CameraStrip changes needed) ────
@@ -439,7 +475,7 @@ export function CameraTile({
   );
 }
 
-async function playWhep(video: HTMLVideoElement, whepUrl: string): Promise<RTCPeerConnection> {
+async function playWhep(video: HTMLVideoElement, whepUrl: string): Promise<{ pc: RTCPeerConnection; stream: MediaStream }> {
   const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.addTransceiver("audio", { direction: "recvonly" });
@@ -454,5 +490,5 @@ async function playWhep(video: HTMLVideoElement, whepUrl: string): Promise<RTCPe
   });
   if (!ans.ok) throw new Error(`WHEP ${ans.status} (${whepUrl})`);
   await pc.setRemoteDescription({ type: "answer", sdp: await ans.text() });
-  return pc;
+  return { pc, stream };
 }
