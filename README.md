@@ -5,7 +5,7 @@ I hope you find this platform valuable. Please feel free to reach out if you hav
 > Extended with: pluggable connectors, generic IoT/MQTT/Webhook/RSS
 > ingest, 3D globe (Cesium) + 2D MapLibre, browser-side computer-vision detection, and an
 > autonomous browser agent powered by `@huggingface/transformers` on WebGPU.
-
+<img width="1440" height="900" alt="image" src="https://github.com/user-attachments/assets/7bed9de5-0616-4552-abd4-08ef21f70837" />
 ## Quickstart (local dev)
 
 ```bash
